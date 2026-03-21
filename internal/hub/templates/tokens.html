@@ -13,18 +13,60 @@
         <tr>
             <th>Token Value</th>
             <th>Expires</th>
+            <th>Actions</th>
         </tr>
     </thead>
     <tbody>
         {{range .Tokens}}
         <tr>
-            <td><span class="token-value">{{.Value}}</span></td>
+            <td>
+                <span class="token-value">{{.Value}}</span>
+                <button class="copy-btn" onclick="copyToken(this, '{{.Value}}')" title="Copy token">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"/></svg>
+                </button>
+            </td>
             <td>{{formatTime .ExpiresAt}}</td>
+            <td class="actions">
+                <button class="outline secondary" style="padding:0.3em 0.8em;margin:0" onclick="confirmRemove('{{.Value}}')">Remove</button>
+            </td>
         </tr>
         {{end}}
     </tbody>
 </table>
 </figure>
+
+<dialog id="removeDialog" class="confirm-dialog">
+    <article>
+        <h4>Remove token?</h4>
+        <p>This token will be permanently removed. Devices that haven't enrolled yet won't be able to use it.</p>
+        <footer>
+            <button class="btn-cancel" onclick="document.getElementById('removeDialog').close()">Cancel</button>
+            <form id="removeForm" method="post" style="margin:0">
+                <button type="submit" class="btn-confirm">Remove</button>
+            </form>
+        </footer>
+    </article>
+</dialog>
+
+<script>
+function confirmRemove(tokenValue) {
+    document.getElementById('removeForm').action = '/tokens/' + tokenValue + '/remove';
+    document.getElementById('removeDialog').showModal();
+}
+
+function copyToken(btn, value) {
+    navigator.clipboard.writeText(value).then(function() {
+        btn.innerHTML = '✓';
+        btn.title = 'Copied!';
+        setTimeout(function() {
+            btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"/></svg>';
+            btn.title = 'Copy token';
+        }, 1500);
+    }).catch(function() {
+        alert('Clipboard not available. Please select and copy the token manually.');
+    });
+}
+</script>
 {{else}}
 <p>No active tokens. Generate one to enroll a new device.</p>
 {{end}}

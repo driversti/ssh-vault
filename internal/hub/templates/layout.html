@@ -11,11 +11,25 @@
         .badge-pending { background: #ffc107; color: #000; }
         .badge-approved { background: #28a745; color: #fff; }
         .badge-revoked { background: #dc3545; color: #fff; }
+        .badge-token_used { background: #17a2b8; color: #fff; }
+        .badge-token_removed { background: #fd7e14; color: #fff; }
         .stale { opacity: 0.6; }
         .stale::after { content: " (stale)"; font-size: 0.8em; color: #dc3545; }
         .token-value { font-family: monospace; background: var(--pico-muted-border-color); padding: 0.3em 0.6em; border-radius: 4px; user-select: all; }
+        .copy-btn { background: none; border: none; cursor: pointer; padding: 0.2em 0.4em; opacity: 0.6; vertical-align: middle; }
+        .copy-btn:hover { opacity: 1; }
         nav { margin-bottom: 1em; }
         .actions form { display: inline; }
+        .confirm-dialog { background-color: rgba(0,0,0,0.25); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
+        .confirm-dialog > article { max-width: 360px; border-radius: 8px; box-shadow: 0 8px 30px rgba(0,0,0,0.12); padding: 1.5em; }
+        .confirm-dialog > article > h4 { margin: 0 0 0.5em; font-size: 1.05em; }
+        .confirm-dialog > article > p { margin: 0 0 1.5em; font-size: 0.9em; color: var(--pico-muted-color); line-height: 1.5; }
+        .confirm-dialog > article > footer { padding: 0; display: flex; gap: 0.5em; justify-content: flex-end; }
+        .confirm-dialog > article > footer button { width: auto; padding: 0.45em 1.1em; border-radius: 6px; font-size: 0.85em; font-weight: 500; margin: 0; }
+        .confirm-dialog > article > footer .btn-cancel { background: none; border: 1px solid var(--pico-muted-border-color); color: var(--pico-muted-color); }
+        .confirm-dialog > article > footer .btn-cancel:hover { border-color: var(--pico-color); color: var(--pico-color); }
+        .confirm-dialog > article > footer .btn-confirm { background: #dc3545; border: none; color: #fff; }
+        .confirm-dialog > article > footer .btn-confirm:hover { background: #c82333; }
     </style>
 </head>
 <body>
