@@ -51,9 +51,14 @@ func Enroll(cfg EnrollConfig) (*Config, error) {
 		if !errors.As(err, &passErr) {
 			return nil, fmt.Errorf("parsing SSH key: %w", err)
 		}
-		fmt.Print("Enter passphrase for SSH key: ")
-		passphrase, readErr := term.ReadPassword(int(os.Stdin.Fd()))
-		fmt.Println()
+		tty, ttyErr := os.Open("/dev/tty")
+		if ttyErr != nil {
+			return nil, fmt.Errorf("cannot open terminal for passphrase prompt: %w", ttyErr)
+		}
+		defer tty.Close()
+		fmt.Fprint(tty, "Enter passphrase for SSH key: ")
+		passphrase, readErr := term.ReadPassword(int(tty.Fd()))
+		fmt.Fprintln(tty)
 		if readErr != nil {
 			return nil, fmt.Errorf("reading passphrase: %w", readErr)
 		}
