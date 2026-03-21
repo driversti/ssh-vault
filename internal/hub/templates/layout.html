@@ -51,6 +51,20 @@
         </nav>
         {{template "content" .}}
     </main>
+    <script>
+    document.querySelectorAll("td, small").forEach(function(el) {
+        var text = el.textContent.trim();
+        if (/^\d{4}-\d{2}-\d{2}T/.test(text)) {
+            var d = new Date(text);
+            if (!isNaN(d)) {
+                el.textContent = d.toLocaleString(undefined, {
+                    year: "numeric", month: "2-digit", day: "2-digit",
+                    hour: "2-digit", minute: "2-digit"
+                });
+            }
+        }
+    });
+    </script>
 </body>
 </html>
 {{end}}

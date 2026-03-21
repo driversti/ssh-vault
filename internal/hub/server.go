@@ -58,13 +58,13 @@ func NewServer(cfg ServerConfig) *Server {
 			if t.IsZero() {
 				return "—"
 			}
-			return t.Format("2006-01-02 15:04 UTC")
+			return t.UTC().Format(time.RFC3339)
 		},
 		"formatTimePtr": func(t *time.Time) string {
 			if t == nil {
 				return "never"
 			}
-			return t.Format("2006-01-02 15:04 UTC")
+			return t.UTC().Format(time.RFC3339)
 		},
 		"formatFingerprint": func(fp string) string {
 			if len(fp) > 20 {
