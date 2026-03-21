@@ -302,6 +302,28 @@ echo "Enrolling device..."
     --name "$DEVICE_NAME"
 
 echo ""
+
+# Install binary to PATH if it was downloaded to a temp dir
+if [ -n "$VAULT_TMPDIR" ]; then
+    INSTALL_DIR="/usr/local/bin"
+    if [ -w "$INSTALL_DIR" ] || { command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; }; then
+        echo "Installing ssh-vault to ${INSTALL_DIR}..."
+        sudo install -m 755 "$VAULT_BIN" "${INSTALL_DIR}/ssh-vault" 2>/dev/null || \
+            install -m 755 "$VAULT_BIN" "${INSTALL_DIR}/ssh-vault"
+    else
+        INSTALL_DIR="${HOME}/.local/bin"
+        mkdir -p "$INSTALL_DIR"
+        install -m 755 "$VAULT_BIN" "${INSTALL_DIR}/ssh-vault"
+        case ":$PATH:" in
+            *":${INSTALL_DIR}:"*) ;;
+            *) echo "NOTE: Add ${INSTALL_DIR} to your PATH" ;;
+        esac
+    fi
+    rm -rf "$VAULT_TMPDIR"
+    echo "Installed: $(command -v ssh-vault 2>/dev/null || echo "${INSTALL_DIR}/ssh-vault")"
+fi
+
+echo ""
 echo "=== Enrollment complete! ==="
 echo "Your device is now pending approval."
 echo "Ask your administrator to approve it on the hub dashboard."
