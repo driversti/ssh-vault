@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"io/fs"
 	"html/template"
 	"log/slog"
 	"net/http"
@@ -33,7 +34,7 @@ type Server struct {
 	addr        string
 	tlsCert     string
 	tlsKey      string
-	tmpl        *template.Template
+	tmpl        map[string]*template.Template
 	externalURL string
 	distDir     string
 	enrollLimiter *RateLimiter
@@ -80,7 +81,20 @@ func NewServer(cfg ServerConfig) *Server {
 		"upper": strings.ToUpper,
 	}
 
-	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFS(templateFS, "templates/*.html"))
+	// Parse each page template individually with the layout to avoid
+	// colliding "content"/"title" block definitions.
+	layoutText, _ := fs.ReadFile(templateFS, "templates/layout.html")
+	pages := []string{"devices.html", "tokens.html", "audit.html", "login.html"}
+	tmpls := make(map[string]*template.Template, len(pages))
+	for _, page := range pages {
+		pageText, _ := fs.ReadFile(templateFS, "templates/"+page)
+		t := template.Must(
+			template.Must(
+				template.New(page).Funcs(funcMap).Parse(string(layoutText)),
+			).Parse(string(pageText)),
+		)
+		tmpls[page] = t
+	}
 
 	s := &Server{
 		store:         cfg.Store,
@@ -90,7 +104,7 @@ func NewServer(cfg ServerConfig) *Server {
 		addr:          cfg.Addr,
 		tlsCert:       cfg.TLSCert,
 		tlsKey:        cfg.TLSKey,
-		tmpl:          tmpl,
+		tmpl:          tmpls,
 		externalURL:   cfg.ExternalURL,
 		distDir:       cfg.DistDir,
 		enrollLimiter: NewRateLimiter(1*time.Minute, 10),
@@ -311,8 +325,14 @@ func deviceFromContext(ctx context.Context) *model.Device {
 
 // renderTemplate renders a named template with the given data.
 func (s *Server) renderTemplate(w http.ResponseWriter, name string, data any) {
+	t, ok := s.tmpl[name]
+	if !ok {
+		slog.Error("template not found", "template", name)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.tmpl.ExecuteTemplate(w, name, data); err != nil {
+	if err := t.ExecuteTemplate(w, name, data); err != nil {
 		slog.Error("rendering template", "template", name, "error", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 	}
