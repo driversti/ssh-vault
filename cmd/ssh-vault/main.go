@@ -127,8 +127,8 @@ func runAgent(args []string) error {
 		return fmt.Errorf("--hub-url is required")
 	}
 	cfg.Interval = dur
-	cfg.KeyPath = *keyPath
-	cfg.AuthKeysPath = *authKeysPath
+	cfg.KeyPath = expandHome(*keyPath)
+	cfg.AuthKeysPath = expandHome(*authKeysPath)
 
 	return agent.Run(cfg)
 }
@@ -160,7 +160,7 @@ func runEnroll(args []string) error {
 	cfg, err := agent.Enroll(agent.EnrollConfig{
 		HubURL:  *hubURL,
 		Token:   *token,
-		KeyPath: *keyPath,
+		KeyPath: expandHome(*keyPath),
 		Name:    *name,
 	})
 	if err != nil {
@@ -178,4 +178,16 @@ func runEnroll(args []string) error {
 
 	fmt.Printf("Config saved to %s\n", configPath)
 	return nil
+}
+
+// expandHome replaces a leading ~ with the user's home directory.
+func expandHome(path string) string {
+	if path == "~" || len(path) > 1 && path[:2] == "~/" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return path
+		}
+		return filepath.Join(home, path[1:])
+	}
+	return path
 }
