@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"strings"
 
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/term"
 )
 
 // EnrollConfig holds the parameters for the enrollment flow.
@@ -45,7 +47,20 @@ func Enroll(cfg EnrollConfig) (*Config, error) {
 
 	signer, err := ssh.ParsePrivateKey(keyData)
 	if err != nil {
-		return nil, fmt.Errorf("parsing SSH key: %w", err)
+		var passErr *ssh.PassphraseMissingError
+		if !errors.As(err, &passErr) {
+			return nil, fmt.Errorf("parsing SSH key: %w", err)
+		}
+		fmt.Print("Enter passphrase for SSH key: ")
+		passphrase, readErr := term.ReadPassword(int(os.Stdin.Fd()))
+		fmt.Println()
+		if readErr != nil {
+			return nil, fmt.Errorf("reading passphrase: %w", readErr)
+		}
+		signer, err = ssh.ParsePrivateKeyWithPassphrase(keyData, passphrase)
+		if err != nil {
+			return nil, fmt.Errorf("parsing SSH key with passphrase: %w", err)
+		}
 	}
 
 	// Get the public key in authorized_keys format
