@@ -11,7 +11,8 @@ FROM alpine:3
 RUN adduser -D -u 1000 vault
 WORKDIR /app
 COPY --from=builder /build/ssh-vault .
-RUN mkdir /data && chown vault:vault /data
+RUN mkdir /data && chown vault:vault /data && \
+    mkdir /dist && chown vault:vault /dist
 
 USER vault
 EXPOSE 8080

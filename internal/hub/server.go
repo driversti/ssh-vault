@@ -35,8 +35,7 @@ type Server struct {
 	tlsKey      string
 	tmpl        *template.Template
 	externalURL string
-	githubRepo  string
-	releaseTag  string
+	distDir     string
 	enrollLimiter *RateLimiter
 }
 
@@ -48,8 +47,7 @@ type ServerConfig struct {
 	TLSCert     string
 	TLSKey      string
 	ExternalURL string
-	GithubRepo  string
-	ReleaseTag  string
+	DistDir     string
 }
 
 // NewServer creates a new hub server with all routes registered.
@@ -94,8 +92,7 @@ func NewServer(cfg ServerConfig) *Server {
 		tlsKey:        cfg.TLSKey,
 		tmpl:          tmpl,
 		externalURL:   cfg.ExternalURL,
-		githubRepo:    cfg.GithubRepo,
-		releaseTag:    cfg.ReleaseTag,
+		distDir:       cfg.DistDir,
 		enrollLimiter: NewRateLimiter(1*time.Minute, 10),
 	}
 	s.registerRoutes()
@@ -117,6 +114,9 @@ func (s *Server) registerRoutes() {
 
 	// Health check (no auth)
 	s.mux.HandleFunc("/healthz", s.handleHealthz)
+
+	// Binary downloads (public)
+	s.mux.HandleFunc("/download/", s.handleDownload)
 
 	// Short enrollment URL (public, rate-limited)
 	s.mux.HandleFunc("/e/", s.handleShortCodeEnroll)

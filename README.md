@@ -49,11 +49,10 @@ On your always-on server (home server, VPS, etc.):
 export VAULT_PASSWORD="your-secret-passphrase"
 ./ssh-vault hub --addr :8080 --data ./data \
   --external-url https://your-hub:8080 \
-  --github-repo yourname/ssh-vault \
-  --release-tag v1.0.0
+  --dist-dir ./dist
 ```
 
-> The `--external-url` and `--github-repo` flags enable quick enrollment links on the dashboard. Without them, only manual token-based enrollment is available.
+> The `--external-url` flag enables quick enrollment links on the dashboard. The `--dist-dir` flag points to a directory of pre-built binaries so the enrollment script can download the agent directly from the hub. Without `--external-url`, only manual token-based enrollment is available.
 
 ### 2. Enroll a Device
 
@@ -115,8 +114,7 @@ Start the hub server (dashboard + API).
 | `--tls-cert` | — | TLS certificate file (optional) |
 | `--tls-key` | — | TLS private key file (optional) |
 | `--external-url` | — | Public URL for enrollment links (or `VAULT_EXTERNAL_URL` env) |
-| `--github-repo` | — | GitHub repo for binary downloads, e.g. `owner/repo` (or `VAULT_GITHUB_REPO` env) |
-| `--release-tag` | `latest` | GitHub Release tag for binary downloads (or `VAULT_RELEASE_TAG` env) |
+| `--dist-dir` | — | Directory of pre-built binaries for enrollment downloads (or `VAULT_DIST_DIR` env) |
 
 ### `ssh-vault enroll`
 
@@ -149,7 +147,7 @@ Start the sync agent.
 1. Admin clicks **Generate Enrollment Link** on the dashboard
 2. Hub creates a 6-digit short code (valid 15 min, single-use) linked to an auto-generated token (valid 24h)
 3. User runs `curl -sSL https://hub/e/CODE | sh` on the target device
-4. Script detects platform (Linux/macOS, amd64/arm64), downloads the binary from GitHub Releases, verifies its SHA-256 checksum, finds SSH keys, and runs the enrollment
+4. Script detects platform (Linux/macOS, amd64/arm64), downloads the binary from the hub via `GET /download/{os}/{arch}`, verifies its SHA-256 checksum, finds SSH keys, and runs the enrollment
 5. The standard challenge-response handshake completes automatically
 6. Owner approves via dashboard
 

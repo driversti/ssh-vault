@@ -8,8 +8,8 @@ services:
       - "${VAULT_PORT:-8080}:8080"
     volumes:
       - ./data:/data
+      - ./dist:/dist:ro
     environment:
       - VAULT_PASSWORD=${VAULT_PASSWORD}
       - VAULT_EXTERNAL_URL=${VAULT_EXTERNAL_URL}
-      - VAULT_GITHUB_REPO=${VAULT_GITHUB_REPO:-}
-      - VAULT_RELEASE_TAG=${VAULT_RELEASE_TAG:-}
+      - VAULT_DIST_DIR=/dist

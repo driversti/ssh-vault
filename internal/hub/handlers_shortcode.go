@@ -24,8 +24,8 @@ func (s *Server) handleGenerateLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.externalURL == "" || s.githubRepo == "" {
-		slog.Error("short enrollment requires -external-url and -github-repo configuration")
+	if s.externalURL == "" {
+		slog.Error("short enrollment requires -external-url configuration")
 		http.Error(w, "enrollment links not configured", http.StatusInternalServerError)
 		return
 	}
@@ -146,14 +146,8 @@ func (s *Server) handleShortCodeEnroll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build download base URL
-	tag := s.releaseTag
-	if tag == "" {
-		tag = "latest"
-	}
-	downloadBaseURL := fmt.Sprintf("https://github.com/%s/releases/download/%s", s.githubRepo, tag)
-
 	// Render the enrollment script
+	downloadBaseURL := s.externalURL + "/download"
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	script := buildEnrollmentScript(s.externalURL, tok.Value, downloadBaseURL)
 	w.Write([]byte(script))
@@ -223,7 +217,7 @@ else
     # Download binary
     VAULT_TMPDIR="$(mktemp -d)"
     BINARY_NAME="ssh-vault_${OS}_${ARCH}"
-    BINARY_URL="${VAULT_DOWNLOAD_BASE}/${BINARY_NAME}"
+    BINARY_URL="${VAULT_DOWNLOAD_BASE}/${OS}/${ARCH}"
     VAULT_BIN="${VAULT_TMPDIR}/ssh-vault"
 
     echo "Downloading ssh-vault from ${BINARY_URL}..."

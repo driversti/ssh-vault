@@ -24,8 +24,7 @@ func testServerWithEnrollment(t *testing.T) *Server {
 		Password:    "test-password",
 		Addr:        ":0",
 		ExternalURL: "https://test.example.com",
-		GithubRepo:  "testowner/testrepo",
-		ReleaseTag:  "v1.0.0",
+		DistDir:     t.TempDir(),
 	})
 }
 
@@ -149,8 +148,8 @@ func TestHandleShortCodeEnroll_ValidCode(t *testing.T) {
 	if !strings.Contains(body, "https://test.example.com") {
 		t.Error("response should contain the hub URL")
 	}
-	if !strings.Contains(body, "testowner/testrepo") {
-		t.Error("response should contain the GitHub repo in download URL")
+	if !strings.Contains(body, "https://test.example.com/download") {
+		t.Error("response should contain the hub download URL")
 	}
 }
 
@@ -272,7 +271,7 @@ func TestHandleShortCodeEnroll_ScriptContainsTemplateVars(t *testing.T) {
 	}{
 		{"hub URL variable", `VAULT_HUB_URL="https://test.example.com"`},
 		{"token variable", `VAULT_TOKEN="` + tok.Value + `"`},
-		{"download base URL", `releases/download/v1.0.0`},
+		{"download base URL", `https://test.example.com/download`},
 		{"platform detection", `uname -s`},
 		{"arch detection", `uname -m`},
 		{"SSH key discovery", `~/.ssh/id_ed25519.pub`},
