@@ -208,6 +208,46 @@ func (fs *FileStore) ListTokens() []model.Token {
 	return result
 }
 
+// RemoveToken removes an unused token by value and persists.
+// Returns an error if the token is not found or has already been used.
+func (fs *FileStore) RemoveToken(value string) error {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	for i := range fs.data.Tokens {
+		if fs.data.Tokens[i].Value == value {
+			if fs.data.Tokens[i].Used {
+				return fmt.Errorf("cannot remove used token")
+			}
+			last := len(fs.data.Tokens) - 1
+			fs.data.Tokens[i] = fs.data.Tokens[last]
+			fs.data.Tokens = fs.data.Tokens[:last]
+			return fs.Save()
+		}
+	}
+	return fmt.Errorf("token not found: %s", value)
+}
+
+// PurgeExpiredTokens removes all expired tokens from storage and persists.
+// Used tokens are retained as historical records. Returns the count of purged tokens.
+func (fs *FileStore) PurgeExpiredTokens() (int, error) {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	kept := fs.data.Tokens[:0]
+	for _, t := range fs.data.Tokens {
+		if !t.IsExpired() || t.Used {
+			kept = append(kept, t)
+		}
+	}
+	purged := len(fs.data.Tokens) - len(kept)
+	if purged == 0 {
+		return 0, nil
+	}
+	fs.data.Tokens = kept
+	return purged, fs.Save()
+}
+
 // AddAuditEntry adds an audit log entry and persists.
 func (fs *FileStore) AddAuditEntry(entry model.AuditEntry) error {
 	fs.mu.Lock()

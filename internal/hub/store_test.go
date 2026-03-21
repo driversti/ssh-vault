@@ -213,3 +213,183 @@ func TestFileStore_GetDeviceByAPIToken(t *testing.T) {
 		t.Error("expected error for wrong token")
 	}
 }
+
+func TestFileStore_RemoveToken(t *testing.T) {
+	tests := []struct {
+		name      string
+		setup     func(fs *FileStore)
+		removeVal string
+		wantErr   string
+	}{
+		{
+			name: "remove valid unused token",
+			setup: func(fs *FileStore) {
+				fs.AddToken(model.Token{
+					Value:     "tok-to-remove",
+					ExpiresAt: time.Now().UTC().Add(1 * time.Hour),
+				})
+			},
+			removeVal: "tok-to-remove",
+		},
+		{
+			name: "remove used token returns error",
+			setup: func(fs *FileStore) {
+				fs.AddToken(model.Token{
+					Value:     "tok-used",
+					ExpiresAt: time.Now().UTC().Add(1 * time.Hour),
+					Used:      true,
+					UsedBy:    "dev-1",
+				})
+			},
+			removeVal: "tok-used",
+			wantErr:   "cannot remove used token",
+		},
+		{
+			name:      "remove nonexistent token returns error",
+			setup:     func(fs *FileStore) {},
+			removeVal: "nonexistent",
+			wantErr:   "token not found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fs, err := NewFileStore(tempStorePath(t))
+			if err != nil {
+				t.Fatalf("NewFileStore: %v", err)
+			}
+			tt.setup(fs)
+
+			err = fs.RemoveToken(tt.removeVal)
+			if tt.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
+				}
+				if !contains(err.Error(), tt.wantErr) {
+					t.Fatalf("error = %q, want containing %q", err.Error(), tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("RemoveToken: %v", err)
+			}
+
+			// Verify token is gone
+			_, err = fs.GetToken(tt.removeVal)
+			if err == nil {
+				t.Error("expected error after removing token, got nil")
+			}
+		})
+	}
+}
+
+func TestFileStore_RemoveToken_PreservesOthers(t *testing.T) {
+	fs, err := NewFileStore(tempStorePath(t))
+	if err != nil {
+		t.Fatalf("NewFileStore: %v", err)
+	}
+
+	for _, v := range []string{"tok-a", "tok-b", "tok-c"} {
+		fs.AddToken(model.Token{
+			Value:     v,
+			ExpiresAt: time.Now().UTC().Add(1 * time.Hour),
+		})
+	}
+
+	if err := fs.RemoveToken("tok-b"); err != nil {
+		t.Fatalf("RemoveToken: %v", err)
+	}
+
+	// tok-a and tok-c should remain
+	for _, v := range []string{"tok-a", "tok-c"} {
+		if _, err := fs.GetToken(v); err != nil {
+			t.Errorf("GetToken(%q) should exist after removing tok-b: %v", v, err)
+		}
+	}
+	if _, err := fs.GetToken("tok-b"); err == nil {
+		t.Error("tok-b should not exist after removal")
+	}
+}
+
+func TestFileStore_PurgeExpiredTokens(t *testing.T) {
+	tests := []struct {
+		name      string
+		tokens    []model.Token
+		wantPurge int
+		wantLeft  int
+	}{
+		{
+			name: "purges expired, keeps valid",
+			tokens: []model.Token{
+				{Value: "valid", ExpiresAt: time.Now().UTC().Add(1 * time.Hour)},
+				{Value: "expired", ExpiresAt: time.Now().UTC().Add(-1 * time.Second)},
+			},
+			wantPurge: 1,
+			wantLeft:  1,
+		},
+		{
+			name: "keeps used tokens even if expired",
+			tokens: []model.Token{
+				{Value: "used-expired", ExpiresAt: time.Now().UTC().Add(-1 * time.Second), Used: true, UsedBy: "dev-1"},
+				{Value: "valid", ExpiresAt: time.Now().UTC().Add(1 * time.Hour)},
+			},
+			wantPurge: 0,
+			wantLeft:  2,
+		},
+		{
+			name: "no expired tokens",
+			tokens: []model.Token{
+				{Value: "a", ExpiresAt: time.Now().UTC().Add(1 * time.Hour)},
+				{Value: "b", ExpiresAt: time.Now().UTC().Add(2 * time.Hour)},
+			},
+			wantPurge: 0,
+			wantLeft:  2,
+		},
+		{
+			name: "all expired unused",
+			tokens: []model.Token{
+				{Value: "x", ExpiresAt: time.Now().UTC().Add(-1 * time.Hour)},
+				{Value: "y", ExpiresAt: time.Now().UTC().Add(-2 * time.Hour)},
+			},
+			wantPurge: 2,
+			wantLeft:  0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fs, err := NewFileStore(tempStorePath(t))
+			if err != nil {
+				t.Fatalf("NewFileStore: %v", err)
+			}
+			for _, tok := range tt.tokens {
+				fs.AddToken(tok)
+			}
+
+			purged, err := fs.PurgeExpiredTokens()
+			if err != nil {
+				t.Fatalf("PurgeExpiredTokens: %v", err)
+			}
+			if purged != tt.wantPurge {
+				t.Errorf("purged = %d, want %d", purged, tt.wantPurge)
+			}
+			left := fs.ListTokens()
+			if len(left) != tt.wantLeft {
+				t.Errorf("tokens remaining = %d, want %d", len(left), tt.wantLeft)
+			}
+		})
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
+}
+
+func containsHelper(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

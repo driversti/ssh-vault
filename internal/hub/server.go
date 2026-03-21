@@ -107,6 +107,7 @@ func (s *Server) registerRoutes() {
 	// Dashboard routes (session auth required)
 	s.mux.HandleFunc("/", s.requireSession(s.handleDashboard))
 	s.mux.HandleFunc("/tokens", s.requireSession(s.handleTokens))
+	s.mux.HandleFunc("/tokens/", s.requireSession(s.handleTokenAction))
 	s.mux.HandleFunc("/audit", s.requireSession(s.handleAudit))
 	s.mux.HandleFunc("/devices/", s.requireSession(s.handleDeviceAction))
 }
@@ -132,6 +133,13 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
+		// Purge expired tokens on page load (FR-009).
+		if purged, err := s.store.PurgeExpiredTokens(); err != nil {
+			slog.Error("purging expired tokens", "error", err)
+		} else if purged > 0 {
+			slog.Info("purged expired tokens", "count", purged)
+		}
+
 		tokens := s.store.ListTokens()
 		// Filter to active (unused, not expired)
 		var active []model.Token
@@ -184,6 +192,17 @@ func (s *Server) handleStaticCSS(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/css")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.Write(data)
+}
+
+// handleTokenAction routes /tokens/{value}/remove.
+func (s *Server) handleTokenAction(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Path
+	switch {
+	case strings.HasSuffix(path, "/remove"):
+		s.handleRemoveToken(w, r)
+	default:
+		http.NotFound(w, r)
+	}
 }
 
 // handleDeviceAction routes /devices/{id}/approve and /devices/{id}/revoke.

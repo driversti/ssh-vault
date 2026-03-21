@@ -6,7 +6,9 @@ const (
 	EventEnrolled   = "enrolled"
 	EventApproved   = "approved"
 	EventRevoked    = "revoked"
-	EventAuthFailed = "auth_failed"
+	EventAuthFailed   = "auth_failed"
+	EventTokenUsed    = "token_used"
+	EventTokenRemoved = "token_removed"
 )
 
 // AuditEntry records a notable event in the system.

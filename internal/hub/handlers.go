@@ -132,6 +132,10 @@ func (s *Server) handleEnroll(w http.ResponseWriter, r *http.Request) {
 		model.EventEnrolled, deviceID,
 		fmt.Sprintf("Device '%s' enrolled via token %s...", req.Name, req.Token[:8]),
 	))
+	s.store.AddAuditEntry(model.NewAuditEntry(
+		model.EventTokenUsed, deviceID,
+		fmt.Sprintf("Token %s... used by device '%s'", req.Token[:8], req.Name),
+	))
 
 	slog.Info("device enrolled", "device_id", deviceID, "name", req.Name)
 	writeJSON(w, http.StatusOK, enrollResponse{
@@ -303,6 +307,46 @@ func (s *Server) handleKeys(w http.ResponseWriter, r *http.Request) {
 		Keys:      keys,
 		UpdatedAt: now,
 	})
+}
+
+// handleRemoveToken handles POST /tokens/{value}/remove.
+func (s *Server) handleRemoveToken(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	tokenValue := extractPathParam(r.URL.Path, "/tokens/", "/remove")
+	if tokenValue == "" {
+		http.Error(w, "invalid token value", http.StatusBadRequest)
+		return
+	}
+
+	// Verify token exists and is unused before removing.
+	tok, err := s.store.GetToken(tokenValue)
+	if err != nil {
+		http.Error(w, "token not found", http.StatusNotFound)
+		return
+	}
+	if tok.Used {
+		http.Error(w, "cannot remove used token", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.store.RemoveToken(tokenValue); err != nil {
+		slog.Error("removing token", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	// Audit the removal with truncated token prefix.
+	s.store.AddAuditEntry(model.NewAuditEntry(
+		model.EventTokenRemoved, "",
+		fmt.Sprintf("Token %s... removed", tokenValue[:8]),
+	))
+
+	slog.Info("token removed", "token_prefix", tokenValue[:8])
+	http.Redirect(w, r, "/tokens", http.StatusSeeOther)
 }
 
 // extractPathParam extracts a value between prefix and suffix in a URL path.

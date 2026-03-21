@@ -455,3 +455,184 @@ func TestRevokedDevice_Gets401OnSync(t *testing.T) {
 		t.Errorf("error = %q, want 'device revoked'", errResp["error"])
 	}
 }
+
+// === Token Removal Tests (T009) ===
+
+func TestHandleRemoveToken_Success(t *testing.T) {
+	s := testServer(t)
+	token := addValidToken(t, s)
+
+	req := httptest.NewRequest("POST", "/tokens/"+token+"/remove", nil)
+	addSessionCookie(t, s, req)
+	w := httptest.NewRecorder()
+	s.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want 303; body: %s", w.Code, w.Body.String())
+	}
+
+	// Verify token is gone
+	_, err := s.store.GetToken(token)
+	if err == nil {
+		t.Error("token should be removed from store")
+	}
+
+	// Verify audit entry
+	entries := s.store.ListAuditLog()
+	found := false
+	for _, e := range entries {
+		if e.Event == model.EventTokenRemoved {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected token_removed audit entry")
+	}
+}
+
+func TestHandleRemoveToken_UsedToken(t *testing.T) {
+	s := testServer(t)
+
+	tok := model.Token{
+		Value:     "used-tok-value-1234567890abcdef1234567890abcdef1234567890abcdef12345678",
+		CreatedAt: time.Now().UTC(),
+		ExpiresAt: time.Now().UTC().Add(24 * time.Hour),
+		Used:      true,
+		UsedBy:    "dev-1",
+	}
+	s.store.AddToken(tok)
+
+	req := httptest.NewRequest("POST", "/tokens/"+tok.Value+"/remove", nil)
+	addSessionCookie(t, s, req)
+	w := httptest.NewRecorder()
+	s.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", w.Code)
+	}
+}
+
+func TestHandleRemoveToken_NotFound(t *testing.T) {
+	s := testServer(t)
+
+	req := httptest.NewRequest("POST", "/tokens/nonexistent-token-value/remove", nil)
+	addSessionCookie(t, s, req)
+	w := httptest.NewRecorder()
+	s.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", w.Code)
+	}
+}
+
+func TestHandleRemoveToken_EnrollAfterRemoval(t *testing.T) {
+	s := testServer(t)
+	_, pubKey := generateTestKey(t)
+	token := addValidToken(t, s)
+
+	// Remove the token
+	req := httptest.NewRequest("POST", "/tokens/"+token+"/remove", nil)
+	addSessionCookie(t, s, req)
+	w := httptest.NewRecorder()
+	s.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("remove status = %d, want 303", w.Code)
+	}
+
+	// Attempt enrollment with the removed token — should be rejected (FR-003)
+	body, _ := json.Marshal(map[string]string{
+		"token":      token,
+		"public_key": pubKey,
+		"name":       "test-device",
+	})
+	req2 := httptest.NewRequest("POST", "/api/enroll", bytes.NewReader(body))
+	w2 := httptest.NewRecorder()
+	s.handleEnroll(w2, req2)
+
+	if w2.Code != http.StatusUnauthorized {
+		t.Errorf("enroll after removal: status = %d, want 401", w2.Code)
+	}
+}
+
+// === Token Usage Audit Tests (T012) ===
+
+func TestHandleEnroll_AuditTokenUsed(t *testing.T) {
+	s := testServer(t)
+	_, pubKey := generateTestKey(t)
+	token := addValidToken(t, s)
+
+	body, _ := json.Marshal(map[string]string{
+		"token":      token,
+		"public_key": pubKey,
+		"name":       "audit-test-device",
+	})
+	req := httptest.NewRequest("POST", "/api/enroll", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	s.handleEnroll(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+
+	var resp enrollResponse
+	json.Unmarshal(w.Body.Bytes(), &resp)
+
+	// Verify token_used audit entry exists with correct device ID
+	entries := s.store.ListAuditLog()
+	found := false
+	for _, e := range entries {
+		if e.Event == model.EventTokenUsed && e.DeviceID == resp.DeviceID {
+			if !strings.Contains(e.Details, token[:8]) {
+				t.Errorf("token_used details should contain token prefix %q, got %q", token[:8], e.Details)
+			}
+			if !strings.Contains(e.Details, "audit-test-device") {
+				t.Errorf("token_used details should contain device name, got %q", e.Details)
+			}
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected token_used audit entry with correct device ID")
+	}
+}
+
+func TestHandleTokens_PurgesExpired(t *testing.T) {
+	s := testServer(t)
+
+	// Add an expired token and a valid token
+	s.store.AddToken(model.Token{
+		Value:     "expired-for-purge",
+		CreatedAt: time.Now().UTC().Add(-48 * time.Hour),
+		ExpiresAt: time.Now().UTC().Add(-24 * time.Hour),
+	})
+	s.store.AddToken(model.Token{
+		Value:     "valid-token-here",
+		CreatedAt: time.Now().UTC(),
+		ExpiresAt: time.Now().UTC().Add(24 * time.Hour),
+	})
+
+	// GET /tokens triggers purge
+	req := httptest.NewRequest("GET", "/tokens", nil)
+	addSessionCookie(t, s, req)
+	w := httptest.NewRecorder()
+	s.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+
+	// Expired token should be purged from storage
+	_, err := s.store.GetToken("expired-for-purge")
+	if err == nil {
+		t.Error("expired token should have been purged")
+	}
+
+	// Valid token should still exist
+	_, err = s.store.GetToken("valid-token-here")
+	if err != nil {
+		t.Errorf("valid token should still exist: %v", err)
+	}
+}
