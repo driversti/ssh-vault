@@ -1,0 +1,228 @@
+package hub
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
+
+	"github.com/driversti/ssh-vault/internal/model"
+)
+
+// FileStore provides thread-safe file-backed storage for the hub.
+type FileStore struct {
+	mu   sync.RWMutex
+	path string
+	data model.Store
+}
+
+// NewFileStore creates a FileStore that persists to the given file path.
+// If the file does not exist, it starts with an empty store.
+func NewFileStore(path string) (*FileStore, error) {
+	fs := &FileStore{path: path}
+	if err := fs.Load(); err != nil {
+		return nil, err
+	}
+	return fs, nil
+}
+
+// Load reads the store data from disk. If the file does not exist,
+// it initializes an empty store.
+func (fs *FileStore) Load() error {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	raw, err := os.ReadFile(fs.path)
+	if os.IsNotExist(err) {
+		fs.data = model.Store{}
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("reading store file: %w", err)
+	}
+	if err := json.Unmarshal(raw, &fs.data); err != nil {
+		return fmt.Errorf("parsing store file: %w", err)
+	}
+	return nil
+}
+
+// Save writes the store data to disk atomically.
+func (fs *FileStore) Save() error {
+	raw, err := json.MarshalIndent(fs.data, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling store: %w", err)
+	}
+
+	dir := filepath.Dir(fs.path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("creating data directory: %w", err)
+	}
+
+	tmp, err := os.CreateTemp(dir, ".tmp-store-*")
+	if err != nil {
+		return fmt.Errorf("creating temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+
+	if _, err := tmp.Write(raw); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("writing temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("closing temp file: %w", err)
+	}
+	if err := os.Chmod(tmpPath, 0600); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("setting permissions: %w", err)
+	}
+	if err := os.Rename(tmpPath, fs.path); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("renaming temp file: %w", err)
+	}
+	return nil
+}
+
+// AddDevice adds a device and persists the change.
+func (fs *FileStore) AddDevice(d model.Device) error {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	fs.data.Devices = append(fs.data.Devices, d)
+	return fs.Save()
+}
+
+// GetDevice returns a device by ID.
+func (fs *FileStore) GetDevice(id string) (*model.Device, error) {
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+
+	for i := range fs.data.Devices {
+		if fs.data.Devices[i].ID == id {
+			d := fs.data.Devices[i]
+			return &d, nil
+		}
+	}
+	return nil, fmt.Errorf("device not found: %s", id)
+}
+
+// UpdateDevice replaces the device with the matching ID and persists.
+func (fs *FileStore) UpdateDevice(d model.Device) error {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	for i := range fs.data.Devices {
+		if fs.data.Devices[i].ID == d.ID {
+			fs.data.Devices[i] = d
+			return fs.Save()
+		}
+	}
+	return fmt.Errorf("device not found: %s", d.ID)
+}
+
+// ListDevices returns all devices.
+func (fs *FileStore) ListDevices() []model.Device {
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+
+	result := make([]model.Device, len(fs.data.Devices))
+	copy(result, fs.data.Devices)
+	return result
+}
+
+// ListDevicesByStatus returns devices matching the given status.
+func (fs *FileStore) ListDevicesByStatus(status string) []model.Device {
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+
+	var result []model.Device
+	for _, d := range fs.data.Devices {
+		if d.Status == status {
+			result = append(result, d)
+		}
+	}
+	return result
+}
+
+// GetDeviceByAPIToken returns the device with the given API token.
+func (fs *FileStore) GetDeviceByAPIToken(token string) (*model.Device, error) {
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+
+	for i := range fs.data.Devices {
+		if fs.data.Devices[i].APIToken == token {
+			d := fs.data.Devices[i]
+			return &d, nil
+		}
+	}
+	return nil, fmt.Errorf("device not found for token")
+}
+
+// AddToken adds an onboarding token and persists.
+func (fs *FileStore) AddToken(t model.Token) error {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	fs.data.Tokens = append(fs.data.Tokens, t)
+	return fs.Save()
+}
+
+// GetToken returns a token by value.
+func (fs *FileStore) GetToken(value string) (*model.Token, error) {
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+
+	for i := range fs.data.Tokens {
+		if fs.data.Tokens[i].Value == value {
+			t := fs.data.Tokens[i]
+			return &t, nil
+		}
+	}
+	return nil, fmt.Errorf("token not found: %s", value)
+}
+
+// UseToken marks a token as used by the given device ID and persists.
+func (fs *FileStore) UseToken(value, deviceID string) error {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	for i := range fs.data.Tokens {
+		if fs.data.Tokens[i].Value == value {
+			fs.data.Tokens[i].Used = true
+			fs.data.Tokens[i].UsedBy = deviceID
+			return fs.Save()
+		}
+	}
+	return fmt.Errorf("token not found: %s", value)
+}
+
+// ListTokens returns all tokens.
+func (fs *FileStore) ListTokens() []model.Token {
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+
+	result := make([]model.Token, len(fs.data.Tokens))
+	copy(result, fs.data.Tokens)
+	return result
+}
+
+// AddAuditEntry adds an audit log entry and persists.
+func (fs *FileStore) AddAuditEntry(entry model.AuditEntry) error {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	fs.data.AuditLog = append(fs.data.AuditLog, entry)
+	return fs.Save()
+}
+
+// ListAuditLog returns all audit entries.
+func (fs *FileStore) ListAuditLog() []model.AuditEntry {
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+
+	result := make([]model.AuditEntry, len(fs.data.AuditLog))
+	copy(result, fs.data.AuditLog)
+	return result
+}

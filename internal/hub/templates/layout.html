@@ -1,0 +1,42 @@
+{{define "layout"}}
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SSH Vault — {{template "title" .}}</title>
+    <link rel="stylesheet" href="/static/pico.min.css">
+    <style>
+        .badge { display: inline-block; padding: 0.2em 0.6em; border-radius: 4px; font-size: 0.8em; font-weight: bold; }
+        .badge-pending { background: #ffc107; color: #000; }
+        .badge-approved { background: #28a745; color: #fff; }
+        .badge-revoked { background: #dc3545; color: #fff; }
+        .stale { opacity: 0.6; }
+        .stale::after { content: " (stale)"; font-size: 0.8em; color: #dc3545; }
+        .token-value { font-family: monospace; background: var(--pico-muted-border-color); padding: 0.3em 0.6em; border-radius: 4px; user-select: all; }
+        nav { margin-bottom: 1em; }
+        .actions form { display: inline; }
+    </style>
+</head>
+<body>
+    <main class="container">
+        <nav>
+            <ul>
+                <li><strong>SSH Vault</strong></li>
+            </ul>
+            <ul>
+                <li><a href="/">Devices</a></li>
+                <li><a href="/tokens">Tokens</a></li>
+                <li><a href="/audit">Audit Log</a></li>
+                <li>
+                    <form action="/logout" method="post" style="margin:0">
+                        <button type="submit" class="outline secondary" style="padding:0.3em 0.8em;margin:0">Logout</button>
+                    </form>
+                </li>
+            </ul>
+        </nav>
+        {{template "content" .}}
+    </main>
+</body>
+</html>
+{{end}}

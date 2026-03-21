@@ -1,0 +1,32 @@
+{{define "title"}}Tokens{{end}}
+{{define "content"}}
+<h2>Onboarding Tokens</h2>
+
+<form method="post" action="/tokens" style="margin-bottom: 1em;">
+    <button type="submit">Generate Token</button>
+</form>
+
+{{if .Tokens}}
+<figure>
+<table>
+    <thead>
+        <tr>
+            <th>Token Value</th>
+            <th>Expires</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{range .Tokens}}
+        <tr>
+            <td><span class="token-value">{{.Value}}</span></td>
+            <td>{{formatTime .ExpiresAt}}</td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+</figure>
+{{else}}
+<p>No active tokens. Generate one to enroll a new device.</p>
+{{end}}
+{{end}}
+{{template "layout" .}}

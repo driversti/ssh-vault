@@ -1,0 +1,32 @@
+{{define "title"}}Audit Log{{end}}
+{{define "content"}}
+<h2>Audit Log</h2>
+
+{{if .Entries}}
+<figure>
+<table>
+    <thead>
+        <tr>
+            <th>Time</th>
+            <th>Event</th>
+            <th>Device</th>
+            <th>Details</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{range .Entries}}
+        <tr>
+            <td>{{formatTime .Timestamp}}</td>
+            <td><span class="badge badge-{{.Event}}">{{upper .Event}}</span></td>
+            <td><code>{{.DeviceID}}</code></td>
+            <td>{{.Details}}</td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+</figure>
+{{else}}
+<p>No audit entries yet.</p>
+{{end}}
+{{end}}
+{{template "layout" .}}

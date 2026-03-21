@@ -1,0 +1,52 @@
+{{define "title"}}Devices{{end}}
+{{define "content"}}
+<h2>Devices</h2>
+{{if .Devices}}
+<figure>
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Status</th>
+            <th>Fingerprint</th>
+            <th>Last Sync</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{range .Devices}}
+        <tr{{if isStale .}} class="stale"{{end}}>
+            <td>{{.Name}}</td>
+            <td>
+                <span class="badge badge-{{.Status}}">{{upper .Status}}</span>
+            </td>
+            <td><code>{{formatFingerprint .Fingerprint}}</code></td>
+            <td>{{formatTimePtr .LastSyncAt}}</td>
+            <td class="actions">
+                {{if eq .Status "pending"}}
+                    {{if .Verified}}
+                    <form method="post" action="/devices/{{.ID}}/approve">
+                        <button type="submit" class="outline">Approve</button>
+                    </form>
+                    {{else}}
+                    <small>Awaiting verification</small>
+                    {{end}}
+                {{else if eq .Status "approved"}}
+                    <form method="post" action="/devices/{{.ID}}/revoke"
+                          onsubmit="return confirm('Revoke device {{.Name}}?')">
+                        <button type="submit" class="outline secondary">Revoke</button>
+                    </form>
+                {{else}}
+                    <small>—</small>
+                {{end}}
+            </td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+</figure>
+{{else}}
+<p>No devices enrolled yet. Generate a token and enroll your first device.</p>
+{{end}}
+{{end}}
+{{template "layout" .}}

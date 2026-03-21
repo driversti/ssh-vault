@@ -1,0 +1,26 @@
+{{define "login.html"}}
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SSH Vault — Login</title>
+    <link rel="stylesheet" href="/static/pico.min.css">
+</head>
+<body>
+    <main class="container" style="max-width: 400px; margin-top: 10vh;">
+        <article>
+            <header><h2>SSH Vault</h2></header>
+            {{if .Error}}
+            <p style="color: var(--pico-del-color);">Invalid password. Please try again.</p>
+            {{end}}
+            <form method="post" action="/login">
+                <label for="password">Dashboard Password</label>
+                <input type="password" id="password" name="password" required autofocus>
+                <button type="submit">Log In</button>
+            </form>
+        </article>
+    </main>
+</body>
+</html>
+{{end}}

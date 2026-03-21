@@ -1,0 +1,23 @@
+# Binary
+ssh-vault
+*.exe
+*.test
+*.out
+
+# Go
+vendor/
+
+# Data
+data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env*
