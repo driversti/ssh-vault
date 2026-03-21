@@ -304,7 +304,7 @@ echo "Enrolling device..."
 echo ""
 
 # Install binary to PATH if it was downloaded to a temp dir
-if [ -n "$VAULT_TMPDIR" ]; then
+if [ -n "${VAULT_TMPDIR:-}" ]; then
     INSTALL_DIR="/usr/local/bin"
     if [ -w "$INSTALL_DIR" ] || { command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; }; then
         echo "Installing ssh-vault to ${INSTALL_DIR}..."
