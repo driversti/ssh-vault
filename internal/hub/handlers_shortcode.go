@@ -329,8 +329,7 @@ echo "Your device is now pending approval."
 echo "Ask your administrator to approve it on the hub dashboard."
 echo ""
 echo "Starting sync agent in background..."
-INSTALLED_BIN="$(command -v ssh-vault 2>/dev/null || echo "${INSTALL_DIR}/ssh-vault")"
-nohup "$INSTALLED_BIN" agent --key "$SSH_PRIVATE_KEY" >/dev/null 2>&1 &
+nohup "$VAULT_BIN" agent --key "$SSH_PRIVATE_KEY" >/dev/null 2>&1 &
 echo "Sync agent running (PID $!)."
 echo "To stop: kill $!"
 `, hubURL, hubURL, token, downloadBaseURL)
