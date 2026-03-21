@@ -22,6 +22,7 @@ SSH Vault solves a simple problem: when you add a new laptop, server, or Raspber
 ## Features
 
 - **Single binary** — `ssh-vault` ships as one executable with three subcommands: `hub`, `agent`, `enroll`
+- **Quick enrollment** — generate a 6-digit code on the dashboard, run `curl -sSL https://hub/e/CODE | sh` on any device to enroll in one command
 - **Challenge-response enrollment** — devices prove private key ownership during enrollment via SSH signature verification
 - **Web dashboard** — view devices, generate onboarding tokens, approve/revoke with a clean Pico CSS interface
 - **Managed key block** — agent writes keys between `BEGIN/END SSH-VAULT MANAGED BLOCK` markers in `authorized_keys`, preserving your manual entries
@@ -46,16 +47,29 @@ On your always-on server (home server, VPS, etc.):
 
 ```bash
 export VAULT_PASSWORD="your-secret-passphrase"
-./ssh-vault hub --addr :8080 --data ./data
+./ssh-vault hub --addr :8080 --data ./data \
+  --external-url https://your-hub:8080 \
+  --github-repo yourname/ssh-vault \
+  --release-tag v1.0.0
 ```
 
-### 2. Generate a Token
+> The `--external-url` and `--github-repo` flags enable quick enrollment links on the dashboard. Without them, only manual token-based enrollment is available.
 
-Open `http://your-hub:8080` in a browser, log in with your passphrase, go to **Tokens**, click **Generate Token**, and copy it.
+### 2. Enroll a Device
 
-### 3. Enroll a Device
+**Option A: Quick enrollment (recommended)**
 
-On the device you want to add:
+On the dashboard, go to **Tokens** and click **Generate Enrollment Link**. Copy the displayed command and run it on the target device:
+
+```bash
+curl -sSL https://your-hub:8080/e/123456 | sh
+```
+
+The script automatically detects the platform, downloads the binary, finds SSH keys, and enrolls the device.
+
+**Option B: Manual enrollment**
+
+Generate a token on the dashboard (**Tokens** → **Generate Token**), then on the target device:
 
 ```bash
 ./ssh-vault enroll \
@@ -64,11 +78,11 @@ On the device you want to add:
   --key ~/.ssh/id_ed25519
 ```
 
-### 4. Approve
+### 3. Approve
 
 Back on the dashboard, click **Approve** next to the new device.
 
-### 5. Start the Agent
+### 4. Start the Agent
 
 ```bash
 ./ssh-vault agent \
@@ -79,7 +93,7 @@ Back on the dashboard, click **Approve** next to the new device.
 
 The agent syncs approved keys every 5 minutes into a managed block in `~/.ssh/authorized_keys`.
 
-### 6. Verify
+### 5. Verify
 
 From another enrolled device:
 
@@ -100,6 +114,9 @@ Start the hub server (dashboard + API).
 | `--password` | — | Dashboard passphrase (or `VAULT_PASSWORD` env) |
 | `--tls-cert` | — | TLS certificate file (optional) |
 | `--tls-key` | — | TLS private key file (optional) |
+| `--external-url` | — | Public URL for enrollment links (or `VAULT_EXTERNAL_URL` env) |
+| `--github-repo` | — | GitHub repo for binary downloads, e.g. `owner/repo` (or `VAULT_GITHUB_REPO` env) |
+| `--release-tag` | `latest` | GitHub Release tag for binary downloads (or `VAULT_RELEASE_TAG` env) |
 
 ### `ssh-vault enroll`
 
@@ -126,6 +143,17 @@ Start the sync agent.
 ## How It Works
 
 ### Enrollment Flow
+
+**Quick enrollment** (via short code):
+
+1. Admin clicks **Generate Enrollment Link** on the dashboard
+2. Hub creates a 6-digit short code (valid 15 min, single-use) linked to an auto-generated token (valid 24h)
+3. User runs `curl -sSL https://hub/e/CODE | sh` on the target device
+4. Script detects platform (Linux/macOS, amd64/arm64), downloads the binary from GitHub Releases, verifies its SHA-256 checksum, finds SSH keys, and runs the enrollment
+5. The standard challenge-response handshake completes automatically
+6. Owner approves via dashboard
+
+**Manual enrollment** (via token):
 
 1. Hub generates a single-use onboarding token (valid 24h)
 2. Agent sends the token + SSH public key to `POST /api/enroll`
@@ -173,7 +201,7 @@ internal/
 ├── hub/               # Hub server — HTTP handlers, auth, storage, templates
 ├── agent/             # Sync agent — enrollment, config, sync loop
 ├── keyblock/          # authorized_keys file manipulation (atomic writes)
-└── model/             # Shared types — Device, Token, AuditEntry
+└── model/             # Shared types — Device, Token, ShortCode, AuditEntry
 ```
 
 - **Storage**: Single `data.json` file (human-readable, easy to back up)
@@ -198,6 +226,7 @@ internal/
 - **TLS**: Use `--tls-cert`/`--tls-key` or run behind a reverse proxy. Without TLS, tokens and keys traverse the network in cleartext.
 - **Password**: The dashboard password is compared with constant-time comparison (`crypto/subtle`). Set a strong passphrase.
 - **Tokens**: Onboarding tokens are 32 bytes of `crypto/rand`, single-use, 24h expiry.
+- **Short codes**: 6-digit codes are `crypto/rand`, single-use, 15-minute expiry. The enrollment endpoint (`/e/`) is rate-limited to 10 requests per minute per IP.
 - **File permissions**: `authorized_keys` is written with `0600` permissions via atomic rename.
 - **Single-user system**: Designed for one owner managing their personal devices. Not suited for multi-tenant or team use.
 
@@ -205,8 +234,25 @@ internal/
 
 ```bash
 go build -o ssh-vault ./cmd/ssh-vault   # Build
-go test ./...                            # Run tests (42 test cases)
+go test ./...                            # Run tests
 go vet ./...                             # Static analysis
+```
+
+## Releasing
+
+Releases are automated via GitHub Actions and [GoReleaser](https://goreleaser.com). To publish a new version:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+This triggers the workflow which runs tests, cross-compiles for Linux (amd64, arm64) and macOS (amd64, arm64), and uploads binaries + `checksums.txt` to GitHub Releases.
+
+To build a release locally (without publishing):
+
+```bash
+goreleaser release --snapshot --clean
 ```
 
 ## Requirements

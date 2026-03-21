@@ -26,23 +26,30 @@ const deviceContextKey contextKey = "device"
 
 // Server is the hub HTTP server.
 type Server struct {
-	store    *FileStore
-	password string
-	sessions *sessionStore
-	mux      *http.ServeMux
-	addr     string
-	tlsCert  string
-	tlsKey   string
-	tmpl     *template.Template
+	store       *FileStore
+	password    string
+	sessions    *sessionStore
+	mux         *http.ServeMux
+	addr        string
+	tlsCert     string
+	tlsKey      string
+	tmpl        *template.Template
+	externalURL string
+	githubRepo  string
+	releaseTag  string
+	enrollLimiter *RateLimiter
 }
 
 // ServerConfig holds configuration for creating a new Server.
 type ServerConfig struct {
-	Store    *FileStore
-	Password string
-	Addr     string
-	TLSCert  string
-	TLSKey   string
+	Store       *FileStore
+	Password    string
+	Addr        string
+	TLSCert     string
+	TLSKey      string
+	ExternalURL string
+	GithubRepo  string
+	ReleaseTag  string
 }
 
 // NewServer creates a new hub server with all routes registered.
@@ -78,14 +85,18 @@ func NewServer(cfg ServerConfig) *Server {
 	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFS(templateFS, "templates/*.html"))
 
 	s := &Server{
-		store:    cfg.Store,
-		password: cfg.Password,
-		sessions: newSessionStore(),
-		mux:      http.NewServeMux(),
-		addr:     cfg.Addr,
-		tlsCert:  cfg.TLSCert,
-		tlsKey:   cfg.TLSKey,
-		tmpl:     tmpl,
+		store:         cfg.Store,
+		password:      cfg.Password,
+		sessions:      newSessionStore(),
+		mux:           http.NewServeMux(),
+		addr:          cfg.Addr,
+		tlsCert:       cfg.TLSCert,
+		tlsKey:        cfg.TLSKey,
+		tmpl:          tmpl,
+		externalURL:   cfg.ExternalURL,
+		githubRepo:    cfg.GithubRepo,
+		releaseTag:    cfg.ReleaseTag,
+		enrollLimiter: NewRateLimiter(1*time.Minute, 10),
 	}
 	s.registerRoutes()
 	return s
@@ -104,9 +115,13 @@ func (s *Server) registerRoutes() {
 	// Static assets
 	s.mux.HandleFunc("/static/pico.min.css", s.handleStaticCSS)
 
+	// Short enrollment URL (public, rate-limited)
+	s.mux.HandleFunc("/e/", s.handleShortCodeEnroll)
+
 	// Dashboard routes (session auth required)
 	s.mux.HandleFunc("/", s.requireSession(s.handleDashboard))
 	s.mux.HandleFunc("/tokens", s.requireSession(s.handleTokens))
+	s.mux.HandleFunc("/tokens/generate-link", s.requireSession(s.handleGenerateLink))
 	s.mux.HandleFunc("/tokens/", s.requireSession(s.handleTokenAction))
 	s.mux.HandleFunc("/audit", s.requireSession(s.handleAudit))
 	s.mux.HandleFunc("/devices/", s.requireSession(s.handleDeviceAction))
@@ -140,6 +155,13 @@ func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {
 			slog.Info("purged expired tokens", "count", purged)
 		}
 
+		// Purge expired short codes and orphaned tokens.
+		if purged, err := s.store.PurgeExpiredShortCodes(); err != nil {
+			slog.Error("purging expired short codes", "error", err)
+		} else if purged > 0 {
+			slog.Info("purged expired short codes", "count", purged)
+		}
+
 		tokens := s.store.ListTokens()
 		// Filter to active (unused, not expired)
 		var active []model.Token
@@ -148,8 +170,20 @@ func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {
 				active = append(active, t)
 			}
 		}
+
+		// Collect active short codes for display
+		shortCodes := s.store.ListShortCodes()
+		var activeShortCodes []model.ShortCode
+		for _, sc := range shortCodes {
+			if sc.IsValid() {
+				activeShortCodes = append(activeShortCodes, sc)
+			}
+		}
+
 		s.renderTemplate(w, "tokens.html", map[string]any{
-			"Tokens": active,
+			"Tokens":      active,
+			"ShortCodes":  activeShortCodes,
+			"ExternalURL": s.externalURL,
 		})
 	case http.MethodPost:
 		tok, err := model.NewToken(24 * time.Hour)

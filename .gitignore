@@ -1,5 +1,6 @@
 # Binary
 ssh-vault
+dist/
 *.exe
 *.test
 *.out

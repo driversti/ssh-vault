@@ -1,0 +1,319 @@
+package hub
+
+import (
+	"crypto/rand"
+	"encoding/binary"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/driversti/ssh-vault/internal/model"
+)
+
+const (
+	shortCodeTTL = 15 * time.Minute
+	tokenTTL     = 24 * time.Hour
+)
+
+// handleGenerateLink generates a short enrollment code with a linked token.
+func (s *Server) handleGenerateLink(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.externalURL == "" || s.githubRepo == "" {
+		slog.Error("short enrollment requires -external-url and -github-repo configuration")
+		http.Error(w, "enrollment links not configured", http.StatusInternalServerError)
+		return
+	}
+
+	// Generate a unique 6-digit code
+	code, err := s.generateUniqueCode()
+	if err != nil {
+		slog.Error("generating short code", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	// Auto-create linked enrollment token
+	tok, err := model.NewToken(tokenTTL)
+	if err != nil {
+		slog.Error("generating token for short code", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if err := s.store.AddToken(*tok); err != nil {
+		slog.Error("saving token for short code", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	// Create the short code
+	sc := model.NewShortCode(code, tok.Value, shortCodeTTL)
+	if err := s.store.AddShortCode(*sc); err != nil {
+		slog.Error("saving short code", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	// Audit
+	s.store.AddAuditEntry(model.NewAuditEntry(
+		model.EventShortCodeCreated, "",
+		fmt.Sprintf("Short code %s created (expires %s)", code, sc.ExpiresAt.Format("15:04 UTC")),
+	))
+
+	slog.Info("enrollment link generated", "code", code, "expires", sc.ExpiresAt)
+	http.Redirect(w, r, "/tokens", http.StatusSeeOther)
+}
+
+// generateUniqueCode generates a random 6-digit code (100000–999999) that is
+// unique among all active (non-expired, non-used) short codes.
+func (s *Server) generateUniqueCode() (string, error) {
+	existing := s.store.ListShortCodes()
+	activeSet := make(map[string]bool)
+	for _, sc := range existing {
+		if sc.IsValid() {
+			activeSet[sc.Code] = true
+		}
+	}
+
+	for attempts := 0; attempts < 100; attempts++ {
+		code, err := randomSixDigitCode()
+		if err != nil {
+			return "", err
+		}
+		if !activeSet[code] {
+			return code, nil
+		}
+	}
+	return "", fmt.Errorf("failed to generate unique code after 100 attempts")
+}
+
+// randomSixDigitCode generates a cryptographically random 6-digit string.
+func randomSixDigitCode() (string, error) {
+	var buf [4]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return "", fmt.Errorf("generating random code: %w", err)
+	}
+	n := binary.BigEndian.Uint32(buf[:])
+	code := int(n%900000) + 100000
+	return fmt.Sprintf("%d", code), nil
+}
+
+// handleShortCodeEnroll serves the enrollment script for GET /e/{code}.
+func (s *Server) handleShortCodeEnroll(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Rate limit by IP
+	ip := r.RemoteAddr
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		ip = strings.Split(fwd, ",")[0]
+		ip = strings.TrimSpace(ip)
+	}
+	if !s.enrollLimiter.Allow(ip) {
+		shellError(w, http.StatusTooManyRequests, "Too many requests. Please wait and try again.")
+		return
+	}
+
+	// Extract code from path /e/{code}
+	code := strings.TrimPrefix(r.URL.Path, "/e/")
+	if code == "" || strings.Contains(code, "/") {
+		shellError(w, http.StatusNotFound, "Invalid enrollment URL.")
+		return
+	}
+
+	// Look up the short code
+	sc, err := s.store.GetShortCode(code)
+	if err != nil {
+		shellError(w, http.StatusNotFound, "Invalid or expired enrollment code.")
+		return
+	}
+	if sc.IsExpired() {
+		shellError(w, http.StatusGone, "This enrollment code has expired.")
+		return
+	}
+	if sc.Used {
+		shellError(w, http.StatusNotFound, "Invalid or expired enrollment code.")
+		return
+	}
+
+	// Look up the linked token
+	tok, err := s.store.GetToken(sc.TokenValue)
+	if err != nil || !tok.IsValid() {
+		shellError(w, http.StatusNotFound, "Invalid or expired enrollment code.")
+		return
+	}
+
+	// Build download base URL
+	tag := s.releaseTag
+	if tag == "" {
+		tag = "latest"
+	}
+	downloadBaseURL := fmt.Sprintf("https://github.com/%s/releases/download/%s", s.githubRepo, tag)
+
+	// Render the enrollment script
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	script := buildEnrollmentScript(s.externalURL, tok.Value, downloadBaseURL)
+	w.Write([]byte(script))
+}
+
+// shellError writes an error response as a valid shell script.
+func shellError(w http.ResponseWriter, status int, msg string) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(status)
+	fmt.Fprintf(w, "#!/bin/sh\necho \"Error: %s\"\nexit 1\n", msg)
+}
+
+// buildEnrollmentScript generates the POSIX shell enrollment script.
+func buildEnrollmentScript(hubURL, token, downloadBaseURL string) string {
+	return fmt.Sprintf(`#!/bin/sh
+set -eu
+
+# SSH Vault Enrollment Script
+# Generated by %s
+
+VAULT_HUB_URL="%s"
+VAULT_TOKEN="%s"
+VAULT_DOWNLOAD_BASE="%s"
+
+cleanup() {
+    if [ -n "${VAULT_TMPDIR:-}" ] && [ -d "$VAULT_TMPDIR" ]; then
+        rm -rf "$VAULT_TMPDIR"
+    fi
+}
+trap cleanup EXIT
+
+echo "=== SSH Vault Device Enrollment ==="
+echo ""
+
+# Detect platform
+OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+ARCH="$(uname -m)"
+
+case "$OS" in
+    linux)  OS="linux" ;;
+    darwin) OS="darwin" ;;
+    *)
+        echo "Error: Unsupported operating system: $OS"
+        echo "Supported: linux, darwin (macOS)"
+        exit 1
+        ;;
+esac
+
+case "$ARCH" in
+    x86_64|amd64)   ARCH="amd64" ;;
+    aarch64|arm64)   ARCH="arm64" ;;
+    *)
+        echo "Error: Unsupported architecture: $ARCH"
+        echo "Supported: amd64 (x86_64), arm64 (aarch64)"
+        exit 1
+        ;;
+esac
+
+echo "Platform: ${OS}/${ARCH}"
+
+# Check for existing installation
+EXISTING_BIN="$(command -v ssh-vault 2>/dev/null || true)"
+if [ -n "$EXISTING_BIN" ]; then
+    echo "Found existing ssh-vault: $EXISTING_BIN"
+    VAULT_BIN="$EXISTING_BIN"
+else
+    # Download binary
+    VAULT_TMPDIR="$(mktemp -d)"
+    BINARY_NAME="ssh-vault_${OS}_${ARCH}"
+    BINARY_URL="${VAULT_DOWNLOAD_BASE}/${BINARY_NAME}"
+    VAULT_BIN="${VAULT_TMPDIR}/ssh-vault"
+
+    echo "Downloading ssh-vault from ${BINARY_URL}..."
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL -o "$VAULT_BIN" "$BINARY_URL"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO "$VAULT_BIN" "$BINARY_URL"
+    else
+        echo "Error: Neither curl nor wget found. Please install one and try again."
+        exit 1
+    fi
+
+    # Verify checksum if checksums.txt is available
+    CHECKSUMS_URL="${VAULT_DOWNLOAD_BASE}/checksums.txt"
+    if command -v sha256sum >/dev/null 2>&1; then
+        CHECKSUMS_FILE="${VAULT_TMPDIR}/checksums.txt"
+        if curl -fsSL -o "$CHECKSUMS_FILE" "$CHECKSUMS_URL" 2>/dev/null || wget -qO "$CHECKSUMS_FILE" "$CHECKSUMS_URL" 2>/dev/null; then
+            EXPECTED="$(grep "${BINARY_NAME}" "$CHECKSUMS_FILE" | awk '{print $1}')"
+            if [ -n "$EXPECTED" ]; then
+                ACTUAL="$(sha256sum "$VAULT_BIN" | awk '{print $1}')"
+                if [ "$EXPECTED" != "$ACTUAL" ]; then
+                    echo "Error: Checksum verification failed!"
+                    echo "  Expected: $EXPECTED"
+                    echo "  Got:      $ACTUAL"
+                    exit 1
+                fi
+                echo "Checksum verified."
+            fi
+        fi
+    elif command -v shasum >/dev/null 2>&1; then
+        CHECKSUMS_FILE="${VAULT_TMPDIR}/checksums.txt"
+        if curl -fsSL -o "$CHECKSUMS_FILE" "$CHECKSUMS_URL" 2>/dev/null || wget -qO "$CHECKSUMS_FILE" "$CHECKSUMS_URL" 2>/dev/null; then
+            EXPECTED="$(grep "${BINARY_NAME}" "$CHECKSUMS_FILE" | awk '{print $1}')"
+            if [ -n "$EXPECTED" ]; then
+                ACTUAL="$(shasum -a 256 "$VAULT_BIN" | awk '{print $1}')"
+                if [ "$EXPECTED" != "$ACTUAL" ]; then
+                    echo "Error: Checksum verification failed!"
+                    echo "  Expected: $EXPECTED"
+                    echo "  Got:      $ACTUAL"
+                    exit 1
+                fi
+                echo "Checksum verified."
+            fi
+        fi
+    fi
+
+    chmod +x "$VAULT_BIN"
+    echo "Binary downloaded and verified."
+fi
+
+# Detect device name
+DEVICE_NAME="$(hostname)"
+echo "Device name: ${DEVICE_NAME}"
+
+# Find SSH public key
+SSH_KEY=""
+for key in ~/.ssh/id_ed25519.pub ~/.ssh/id_rsa.pub ~/.ssh/id_ecdsa.pub; do
+    if [ -f "$key" ]; then
+        SSH_KEY="$key"
+        break
+    fi
+done
+
+if [ -z "$SSH_KEY" ]; then
+    echo ""
+    echo "Error: No SSH public key found in ~/.ssh/"
+    echo "Please generate one first:"
+    echo "  ssh-keygen -t ed25519"
+    exit 1
+fi
+
+SSH_PRIVATE_KEY="${SSH_KEY%%.pub}"
+echo "SSH key: ${SSH_KEY}"
+echo ""
+
+# Run enrollment
+echo "Enrolling device..."
+"$VAULT_BIN" enroll \
+    --hub-url "$VAULT_HUB_URL" \
+    --token "$VAULT_TOKEN" \
+    --key "$SSH_PRIVATE_KEY" \
+    --name "$DEVICE_NAME"
+
+echo ""
+echo "=== Enrollment complete! ==="
+echo "Your device is now pending approval."
+echo "Ask your administrator to approve it on the hub dashboard."
+`, hubURL, hubURL, token, downloadBaseURL)
+}

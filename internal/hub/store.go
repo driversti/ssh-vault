@@ -248,6 +248,107 @@ func (fs *FileStore) PurgeExpiredTokens() (int, error) {
 	return purged, fs.Save()
 }
 
+// AddShortCode adds a short code and persists.
+func (fs *FileStore) AddShortCode(sc model.ShortCode) error {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	fs.data.ShortCodes = append(fs.data.ShortCodes, sc)
+	return fs.Save()
+}
+
+// GetShortCode returns a short code by its code value.
+func (fs *FileStore) GetShortCode(code string) (*model.ShortCode, error) {
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+
+	for i := range fs.data.ShortCodes {
+		if fs.data.ShortCodes[i].Code == code {
+			sc := fs.data.ShortCodes[i]
+			return &sc, nil
+		}
+	}
+	return nil, fmt.Errorf("short code not found: %s", code)
+}
+
+// UseShortCode marks a short code as used by the given IP and persists.
+func (fs *FileStore) UseShortCode(code, ip string) (*model.ShortCode, error) {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	for i := range fs.data.ShortCodes {
+		if fs.data.ShortCodes[i].Code == code {
+			sc := &fs.data.ShortCodes[i]
+			if !sc.IsValid() {
+				if sc.IsExpired() {
+					return nil, fmt.Errorf("short code expired: %s", code)
+				}
+				return nil, fmt.Errorf("short code already used: %s", code)
+			}
+			sc.MarkUsed(ip)
+			if err := fs.Save(); err != nil {
+				return nil, err
+			}
+			result := *sc
+			return &result, nil
+		}
+	}
+	return nil, fmt.Errorf("short code not found: %s", code)
+}
+
+// ListShortCodes returns all short codes.
+func (fs *FileStore) ListShortCodes() []model.ShortCode {
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+
+	result := make([]model.ShortCode, len(fs.data.ShortCodes))
+	copy(result, fs.data.ShortCodes)
+	return result
+}
+
+// PurgeExpiredShortCodes removes expired, unused short codes and their orphaned tokens.
+// Returns the count of purged short codes.
+func (fs *FileStore) PurgeExpiredShortCodes() (int, error) {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	var kept []model.ShortCode
+	var orphanedTokens []string
+
+	for _, sc := range fs.data.ShortCodes {
+		if sc.IsExpired() && !sc.Used {
+			orphanedTokens = append(orphanedTokens, sc.TokenValue)
+		} else {
+			kept = append(kept, sc)
+		}
+	}
+
+	purged := len(fs.data.ShortCodes) - len(kept)
+	if purged == 0 {
+		return 0, nil
+	}
+
+	fs.data.ShortCodes = kept
+
+	// Clean up orphaned tokens (tokens linked to expired short codes that were never used)
+	if len(orphanedTokens) > 0 {
+		orphanSet := make(map[string]bool, len(orphanedTokens))
+		for _, tv := range orphanedTokens {
+			orphanSet[tv] = true
+		}
+
+		keptTokens := fs.data.Tokens[:0]
+		for _, t := range fs.data.Tokens {
+			if !orphanSet[t.Value] || t.Used {
+				keptTokens = append(keptTokens, t)
+			}
+		}
+		fs.data.Tokens = keptTokens
+	}
+
+	return purged, fs.Save()
+}
+
 // AddAuditEntry adds an audit log entry and persists.
 func (fs *FileStore) AddAuditEntry(entry model.AuditEntry) error {
 	fs.mu.Lock()
