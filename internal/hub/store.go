@@ -146,6 +146,25 @@ func (fs *FileStore) ListDevicesByStatus(status string) []model.Device {
 	return result
 }
 
+// RemoveDevice removes a revoked device by ID and persists.
+func (fs *FileStore) RemoveDevice(id string) error {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	for i := range fs.data.Devices {
+		if fs.data.Devices[i].ID == id {
+			if fs.data.Devices[i].Status != model.StatusRevoked {
+				return fmt.Errorf("can only remove revoked devices")
+			}
+			last := len(fs.data.Devices) - 1
+			fs.data.Devices[i] = fs.data.Devices[last]
+			fs.data.Devices = fs.data.Devices[:last]
+			return fs.Save()
+		}
+	}
+	return fmt.Errorf("device not found: %s", id)
+}
+
 // GetDeviceByAPIToken returns the device with the given API token.
 func (fs *FileStore) GetDeviceByAPIToken(token string) (*model.Device, error) {
 	fs.mu.RLock()

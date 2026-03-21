@@ -269,6 +269,8 @@ func (s *Server) handleDeviceAction(w http.ResponseWriter, r *http.Request) {
 		s.handleApprove(w, r)
 	case strings.HasSuffix(path, "/revoke"):
 		s.handleRevoke(w, r)
+	case strings.HasSuffix(path, "/remove"):
+		s.handleRemoveDevice(w, r)
 	default:
 		http.NotFound(w, r)
 	}
@@ -374,6 +376,40 @@ func (s *Server) handleRevoke(w http.ResponseWriter, r *http.Request) {
 	))
 
 	slog.Info("device revoked", "device_id", device.ID, "name", device.Name)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+// handleRemoveDevice handles POST /devices/{id}/remove.
+func (s *Server) handleRemoveDevice(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	deviceID := extractPathParam(r.URL.Path, "/devices/", "/remove")
+	if deviceID == "" {
+		http.Error(w, "invalid device ID", http.StatusBadRequest)
+		return
+	}
+
+	device, err := s.store.GetDevice(deviceID)
+	if err != nil {
+		http.Error(w, "device not found", http.StatusNotFound)
+		return
+	}
+
+	if err := s.store.RemoveDevice(deviceID); err != nil {
+		slog.Error("removing device", "error", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	s.store.AddAuditEntry(model.NewAuditEntry(
+		model.EventRevoked, device.ID,
+		fmt.Sprintf("Device '%s' removed", device.Name),
+	))
+
+	slog.Info("device removed", "device_id", device.ID, "name", device.Name)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 

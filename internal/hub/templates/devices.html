@@ -36,8 +36,11 @@
                           onsubmit="return confirm('Revoke device {{.Name}}?')">
                         <button type="submit" class="outline secondary">Revoke</button>
                     </form>
-                {{else}}
-                    <small>—</small>
+                {{else if eq .Status "revoked"}}
+                    <form method="post" action="/devices/{{.ID}}/remove"
+                          onsubmit="return confirm('Remove device {{.Name}}?')">
+                        <button type="submit" class="outline secondary">Remove</button>
+                    </form>
                 {{end}}
             </td>
         </tr>

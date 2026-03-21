@@ -31,8 +31,9 @@ type enrollResponse struct {
 
 // verifyResponse matches the hub's response to POST /api/enroll/verify.
 type verifyResponse struct {
-	Status  string `json:"status"`
-	Message string `json:"message"`
+	Status   string `json:"status"`
+	Message  string `json:"message"`
+	APIToken string `json:"api_token"`
 }
 
 // Enroll performs the enrollment flow: sends the public key and token to the hub,
@@ -142,5 +143,6 @@ func Enroll(cfg EnrollConfig) (*Config, error) {
 	return &Config{
 		HubURL:   cfg.HubURL,
 		DeviceID: enrollResp.DeviceID,
+		APIToken: vResp.APIToken,
 	}, nil
 }

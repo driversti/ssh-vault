@@ -36,8 +36,9 @@ type verifyRequest struct {
 
 // verifyResponse is the JSON response for POST /api/enroll/verify.
 type verifyResponse struct {
-	Status  string `json:"status"`
-	Message string `json:"message"`
+	Status   string `json:"status"`
+	Message  string `json:"message"`
+	APIToken string `json:"api_token,omitempty"`
 }
 
 // keysResponse is the JSON response for GET /api/keys.
@@ -205,9 +206,18 @@ func (s *Server) handleEnrollVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Mark as verified, clear challenge
+	// Mark as verified, clear challenge, generate API token
 	device.Verified = true
 	device.Challenge = ""
+
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		slog.Error("generating API token", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	device.APIToken = hex.EncodeToString(tokenBytes)
+
 	if err := s.store.UpdateDevice(*device); err != nil {
 		slog.Error("updating device", "error", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -216,8 +226,9 @@ func (s *Server) handleEnrollVerify(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("device verified", "device_id", device.ID, "name", device.Name)
 	writeJSON(w, http.StatusOK, verifyResponse{
-		Status:  "pending",
-		Message: "Device registered. Awaiting approval.",
+		Status:   "pending",
+		Message:  "Device registered. Awaiting approval.",
+		APIToken: device.APIToken,
 	})
 }
 
@@ -249,15 +260,6 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	// Generate API token
-	tokenBytes := make([]byte, 32)
-	if _, err := rand.Read(tokenBytes); err != nil {
-		slog.Error("generating API token", "error", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-	device.APIToken = hex.EncodeToString(tokenBytes)
 
 	if err := s.store.UpdateDevice(*device); err != nil {
 		slog.Error("updating device", "error", err)
