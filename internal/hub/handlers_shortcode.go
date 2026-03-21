@@ -111,11 +111,7 @@ func (s *Server) handleShortCodeEnroll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Rate limit by IP
-	ip := r.RemoteAddr
-	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-		ip = strings.Split(fwd, ",")[0]
-		ip = strings.TrimSpace(ip)
-	}
+	ip := clientIP(r)
 	if !s.enrollLimiter.Allow(ip) {
 		shellError(w, http.StatusTooManyRequests, "Too many requests. Please wait and try again.")
 		return

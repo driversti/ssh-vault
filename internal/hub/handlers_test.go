@@ -599,6 +599,21 @@ func TestHandleEnroll_AuditTokenUsed(t *testing.T) {
 	}
 }
 
+func TestHandleHealthz(t *testing.T) {
+	s := testServer(t)
+
+	req := httptest.NewRequest("GET", "/healthz", nil)
+	w := httptest.NewRecorder()
+	s.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+	if w.Body.String() != "ok" {
+		t.Errorf("body = %q, want %q", w.Body.String(), "ok")
+	}
+}
+
 func TestHandleTokens_PurgesExpired(t *testing.T) {
 	s := testServer(t)
 

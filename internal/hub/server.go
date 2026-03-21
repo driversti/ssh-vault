@@ -115,6 +115,9 @@ func (s *Server) registerRoutes() {
 	// Static assets
 	s.mux.HandleFunc("/static/pico.min.css", s.handleStaticCSS)
 
+	// Health check (no auth)
+	s.mux.HandleFunc("/healthz", s.handleHealthz)
+
 	// Short enrollment URL (public, rate-limited)
 	s.mux.HandleFunc("/e/", s.handleShortCodeEnroll)
 
@@ -125,6 +128,11 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/tokens/", s.requireSession(s.handleTokenAction))
 	s.mux.HandleFunc("/audit", s.requireSession(s.handleAudit))
 	s.mux.HandleFunc("/devices/", s.requireSession(s.handleDeviceAction))
+}
+
+func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
 }
 
 // handleDashboard shows the device list.

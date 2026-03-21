@@ -1,0 +1,15 @@
+services:
+  hub:
+    image: ghcr.io/driversti/ssh-vault:latest
+    build: .
+    container_name: ssh-vault-hub
+    restart: unless-stopped
+    ports:
+      - "${VAULT_PORT:-8080}:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      - VAULT_PASSWORD=${VAULT_PASSWORD}
+      - VAULT_EXTERNAL_URL=${VAULT_EXTERNAL_URL}
+      - VAULT_GITHUB_REPO=${VAULT_GITHUB_REPO:-}
+      - VAULT_RELEASE_TAG=${VAULT_RELEASE_TAG:-}
