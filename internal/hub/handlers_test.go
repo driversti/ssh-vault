@@ -651,3 +651,165 @@ func TestHandleTokens_PurgesExpired(t *testing.T) {
 		t.Errorf("valid token should still exist: %v", err)
 	}
 }
+
+func TestHandleRename(t *testing.T) {
+	tests := []struct {
+		name       string
+		deviceID   string
+		device     *model.Device
+		method     string
+		body       string
+		wantCode   int
+		wantName   string
+		wantAudit  bool
+	}{
+		{
+			name:     "successful rename",
+			deviceID: "dev-1",
+			device:   &model.Device{ID: "dev-1", Name: "old-name", PublicKey: "ssh-ed25519 AAAA", Status: model.StatusApproved},
+			method:   "POST",
+			body:     `{"name":"new-name"}`,
+			wantCode: http.StatusOK,
+			wantName: "new-name",
+			wantAudit: true,
+		},
+		{
+			name:     "trims whitespace",
+			deviceID: "dev-1",
+			device:   &model.Device{ID: "dev-1", Name: "old-name", PublicKey: "ssh-ed25519 AAAA", Status: model.StatusApproved},
+			method:   "POST",
+			body:     `{"name":"  trimmed  "}`,
+			wantCode: http.StatusOK,
+			wantName: "trimmed",
+			wantAudit: true,
+		},
+		{
+			name:     "empty name rejected",
+			deviceID: "dev-1",
+			device:   &model.Device{ID: "dev-1", Name: "old-name", PublicKey: "ssh-ed25519 AAAA", Status: model.StatusApproved},
+			method:   "POST",
+			body:     `{"name":""}`,
+			wantCode: http.StatusBadRequest,
+			wantAudit: false,
+		},
+		{
+			name:     "whitespace-only name rejected",
+			deviceID: "dev-1",
+			device:   &model.Device{ID: "dev-1", Name: "old-name", PublicKey: "ssh-ed25519 AAAA", Status: model.StatusApproved},
+			method:   "POST",
+			body:     `{"name":"   "}`,
+			wantCode: http.StatusBadRequest,
+			wantAudit: false,
+		},
+		{
+			name:     "name too long rejected",
+			deviceID: "dev-1",
+			device:   &model.Device{ID: "dev-1", Name: "old-name", PublicKey: "ssh-ed25519 AAAA", Status: model.StatusApproved},
+			method:   "POST",
+			body:     `{"name":"` + strings.Repeat("x", 256) + `"}`,
+			wantCode: http.StatusBadRequest,
+			wantAudit: false,
+		},
+		{
+			name:     "unchanged name is no-op",
+			deviceID: "dev-1",
+			device:   &model.Device{ID: "dev-1", Name: "same-name", PublicKey: "ssh-ed25519 AAAA", Status: model.StatusApproved},
+			method:   "POST",
+			body:     `{"name":"same-name"}`,
+			wantCode: http.StatusOK,
+			wantName: "same-name",
+			wantAudit: false,
+		},
+		{
+			name:     "rename revoked device succeeds",
+			deviceID: "dev-1",
+			device:   &model.Device{ID: "dev-1", Name: "old-name", PublicKey: "ssh-ed25519 AAAA", Status: model.StatusRevoked},
+			method:   "POST",
+			body:     `{"name":"new-name"}`,
+			wantCode: http.StatusOK,
+			wantName: "new-name",
+			wantAudit: true,
+		},
+		{
+			name:     "device not found",
+			deviceID: "nonexistent",
+			device:   nil,
+			method:   "POST",
+			body:     `{"name":"new-name"}`,
+			wantCode: http.StatusNotFound,
+			wantAudit: false,
+		},
+		{
+			name:     "invalid JSON",
+			deviceID: "dev-1",
+			device:   &model.Device{ID: "dev-1", Name: "old-name", PublicKey: "ssh-ed25519 AAAA", Status: model.StatusApproved},
+			method:   "POST",
+			body:     `{invalid`,
+			wantCode: http.StatusBadRequest,
+			wantAudit: false,
+		},
+		{
+			name:     "method not allowed",
+			deviceID: "dev-1",
+			device:   &model.Device{ID: "dev-1", Name: "old-name", PublicKey: "ssh-ed25519 AAAA", Status: model.StatusApproved},
+			method:   "GET",
+			body:     "",
+			wantCode: http.StatusMethodNotAllowed,
+			wantAudit: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := testServer(t)
+			if tt.device != nil {
+				s.store.AddDevice(*tt.device)
+			}
+
+			var bodyReader *bytes.Reader
+			if tt.body != "" {
+				bodyReader = bytes.NewReader([]byte(tt.body))
+			} else {
+				bodyReader = bytes.NewReader(nil)
+			}
+
+			req := httptest.NewRequest(tt.method, "/devices/"+tt.deviceID+"/rename", bodyReader)
+			addSessionCookie(t, s, req)
+			w := httptest.NewRecorder()
+			s.mux.ServeHTTP(w, req)
+
+			if w.Code != tt.wantCode {
+				t.Errorf("status = %d, want %d; body: %s", w.Code, tt.wantCode, w.Body.String())
+			}
+
+			if tt.wantName != "" && w.Code == http.StatusOK {
+				var resp map[string]string
+				json.Unmarshal(w.Body.Bytes(), &resp)
+				if resp["name"] != tt.wantName {
+					t.Errorf("name = %q, want %q", resp["name"], tt.wantName)
+				}
+
+				// Verify persisted
+				device, err := s.store.GetDevice(tt.deviceID)
+				if err != nil {
+					t.Fatalf("GetDevice: %v", err)
+				}
+				if device.Name != tt.wantName {
+					t.Errorf("persisted name = %q, want %q", device.Name, tt.wantName)
+				}
+			}
+
+			// Check audit log
+			entries := s.store.ListAuditLog()
+			hasRenameEntry := false
+			for _, e := range entries {
+				if e.Event == model.EventDeviceRenamed {
+					hasRenameEntry = true
+				}
+			}
+			if hasRenameEntry != tt.wantAudit {
+				t.Errorf("audit entry present = %v, want %v", hasRenameEntry, tt.wantAudit)
+			}
+		})
+	}
+}

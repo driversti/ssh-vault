@@ -41,9 +41,9 @@ Go: Follow Effective Go and Go Code Review Comments guidelines.
 Use `gofmt`/`goimports`. Explicit error handling. Table-driven tests.
 
 ## Recent Changes
+- 007-device-rename: Added Go 1.26.1 + `golang.org/x/crypto/ssh` (existing), standard library only
 - 006-auto-ssh-keygen: Added Go 1.26.1 (CLI binary) + POSIX shell (enrollment script generated server-side) + Standard library, `os/exec` for `ssh-keygen` invocation in Go, `ssh-keygen` CLI tool in shell scrip
 - 005-app-logo: Added Go 1.26.1 + Standard library only (`embed`, `net/http`, `html/template`)
-- 004-self-serve-binaries: Added Go 1.26.1 + Standard library only (existing `golang.org/x/crypto/ssh` unchanged)
 
 
 <!-- MANUAL ADDITIONS START -->

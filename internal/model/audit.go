@@ -12,6 +12,7 @@ const (
 	EventShortCodeCreated = "shortcode_created"
 	EventShortCodeUsed    = "shortcode_used"
 	EventShortCodeExpired = "shortcode_expired"
+	EventDeviceRenamed    = "device_renamed"
 )
 
 // AuditEntry records a notable event in the system.

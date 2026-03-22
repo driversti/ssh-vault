@@ -351,6 +351,72 @@ func (s *Server) handleRemoveToken(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/tokens", http.StatusSeeOther)
 }
 
+// renameRequest is the JSON body for POST /devices/{id}/rename.
+type renameRequest struct {
+	Name string `json:"name"`
+}
+
+// handleRename handles POST /devices/{id}/rename.
+func (s *Server) handleRename(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	deviceID := extractPathParam(r.URL.Path, "/devices/", "/rename")
+	if deviceID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid device ID"})
+		return
+	}
+
+	var req renameRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	newName := strings.TrimSpace(req.Name)
+	if newName == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "device name must not be empty"})
+		return
+	}
+	if len(newName) > 255 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": fmt.Sprintf("device name must not exceed 255 characters, got %d", len(newName)),
+		})
+		return
+	}
+
+	device, err := s.store.GetDevice(deviceID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "device not found"})
+		return
+	}
+
+	// No-op if name unchanged
+	if device.Name == newName {
+		writeJSON(w, http.StatusOK, map[string]string{"name": device.Name})
+		return
+	}
+
+	oldName := device.Name
+	device.Name = newName
+
+	if err := s.store.UpdateDevice(*device); err != nil {
+		slog.Error("renaming device", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	s.store.AddAuditEntry(model.NewAuditEntry(
+		model.EventDeviceRenamed, device.ID,
+		fmt.Sprintf("Device renamed from '%s' to '%s'", oldName, newName),
+	))
+
+	slog.Info("device renamed", "device_id", device.ID, "old_name", oldName, "new_name", newName)
+	writeJSON(w, http.StatusOK, map[string]string{"name": newName})
+}
+
 // extractPathParam extracts a value between prefix and suffix in a URL path.
 func extractPathParam(path, prefix, suffix string) string {
 	if !strings.HasPrefix(path, prefix) {

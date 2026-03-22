@@ -43,7 +43,7 @@
                             <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/></svg>
                         </div>
                         <div>
-                            <div class="device-info-name">{{.Name}}{{if isStale .}}<span class="stale-dot"></span>{{end}}</div>
+                            <div class="device-info-name"><span class="editable-name" data-device-id="{{.ID}}">{{.Name}}</span>{{if isStale .}}<span class="stale-dot"></span>{{end}}</div>
                             <div class="device-info-fp">{{formatFingerprint .Fingerprint}}</div>
                         </div>
                     </div>
@@ -79,5 +79,122 @@
 {{else}}
 <p style="color:var(--text-secondary)">No devices enrolled yet. Generate a token and enroll your first device.</p>
 {{end}}
+<style>
+.editable-name {
+    cursor: pointer;
+    border-bottom: 1px dashed transparent;
+    transition: border-color 0.15s;
+    padding-bottom: 1px;
+}
+.editable-name:hover {
+    border-bottom-color: var(--text-secondary, #888);
+}
+.editable-name-input {
+    font: inherit;
+    padding: 0 2px;
+    border: 1px solid var(--accent, #4a9eff);
+    border-radius: 3px;
+    outline: none;
+    width: 100%;
+    max-width: 250px;
+    box-sizing: border-box;
+}
+.editable-name-saving {
+    opacity: 0.5;
+    pointer-events: none;
+}
+.rename-error {
+    color: var(--danger, #e53e3e);
+    font-size: 0.8em;
+    margin-top: 2px;
+}
+</style>
+<script>
+document.addEventListener('click', function(e) {
+    var span = e.target.closest('.editable-name');
+    if (!span || span.querySelector('input')) return;
+
+    var deviceId = span.dataset.deviceId;
+    var originalName = span.textContent.trim();
+
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.value = originalName;
+    input.maxLength = 255;
+    input.className = 'editable-name-input';
+
+    span.textContent = '';
+    span.appendChild(input);
+    input.focus();
+    input.select();
+
+    var saving = false;
+
+    function save() {
+        if (saving) return;
+        var newName = input.value.trim();
+        if (!newName) {
+            restore();
+            return;
+        }
+        if (newName === originalName) {
+            restore();
+            return;
+        }
+        saving = true;
+        span.classList.add('editable-name-saving');
+
+        // Remove any previous error
+        var prevErr = span.parentElement.querySelector('.rename-error');
+        if (prevErr) prevErr.remove();
+
+        fetch('/devices/' + deviceId + '/rename', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: newName})
+        })
+        .then(function(resp) { return resp.json().then(function(data) { return {ok: resp.ok, data: data}; }); })
+        .then(function(result) {
+            span.classList.remove('editable-name-saving');
+            if (result.ok) {
+                span.textContent = result.data.name;
+            } else {
+                span.textContent = originalName;
+                showError(span, result.data.error || 'Rename failed');
+            }
+            saving = false;
+        })
+        .catch(function() {
+            span.classList.remove('editable-name-saving');
+            span.textContent = originalName;
+            showError(span, 'Network error');
+            saving = false;
+        });
+    }
+
+    function restore() {
+        span.textContent = originalName;
+    }
+
+    function showError(el, msg) {
+        var err = document.createElement('div');
+        err.className = 'rename-error';
+        err.textContent = msg;
+        el.parentElement.appendChild(err);
+        setTimeout(function() { err.remove(); }, 3000);
+    }
+
+    input.addEventListener('blur', save);
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            input.blur();
+        } else if (e.key === 'Escape') {
+            input.removeEventListener('blur', save);
+            restore();
+        }
+    });
+});
+</script>
 {{end}}
 {{template "layout" .}}
