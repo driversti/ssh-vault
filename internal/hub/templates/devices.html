@@ -1,55 +1,83 @@
 {{define "title"}}Devices{{end}}
 {{define "content"}}
-<h2>Devices</h2>
+<div class="page-header">
+    <h1>Devices</h1>
+</div>
+
+<div class="stats-bar">
+    <div class="stat-card">
+        <div class="stat-label">Total</div>
+        <div class="stat-value">{{.TotalCount}}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Approved</div>
+        <div class="stat-value green">{{.ApprovedCount}}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Pending</div>
+        <div class="stat-value yellow">{{.PendingCount}}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Revoked</div>
+        <div class="stat-value red">{{.RevokedCount}}</div>
+    </div>
+</div>
+
 {{if .Devices}}
-<figure>
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Status</th>
-            <th>Fingerprint</th>
-            <th>Last Sync</th>
-            <th>Actions</th>
-        </tr>
-    </thead>
-    <tbody>
-        {{range .Devices}}
-        <tr{{if isStale .}} class="stale"{{end}}>
-            <td>{{.Name}}</td>
-            <td>
-                <span class="badge badge-{{.Status}}">{{upper .Status}}</span>
-            </td>
-            <td><code>{{formatFingerprint .Fingerprint}}</code></td>
-            <td>{{formatTimePtr .LastSyncAt}}</td>
-            <td class="actions">
-                {{if eq .Status "pending"}}
-                    {{if .Verified}}
-                    <form method="post" action="/devices/{{.ID}}/approve">
-                        <button type="submit" class="outline">Approve</button>
-                    </form>
-                    {{else}}
-                    <small>Awaiting verification</small>
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>Device</th>
+                <th>Status</th>
+                <th>Last Sync</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Devices}}
+            <tr{{if isStale .}} class="stale"{{end}}>
+                <td>
+                    <div class="device-cell">
+                        <div class="device-avatar">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/></svg>
+                        </div>
+                        <div>
+                            <div class="device-info-name">{{.Name}}{{if isStale .}}<span class="stale-dot"></span>{{end}}</div>
+                            <div class="device-info-fp">{{formatFingerprint .Fingerprint}}</div>
+                        </div>
+                    </div>
+                </td>
+                <td><span class="pill pill-{{.Status}}">{{upper .Status}}</span></td>
+                <td class="ts">{{formatTimePtr .LastSyncAt}}</td>
+                <td class="actions">
+                    {{if eq .Status "pending"}}
+                        {{if .Verified}}
+                        <form method="post" action="/devices/{{.ID}}/approve">
+                            <button type="submit" class="btn btn-primary btn-sm">Approve</button>
+                        </form>
+                        {{else}}
+                        <span class="awaiting">Awaiting verification</span>
+                        {{end}}
+                    {{else if eq .Status "approved"}}
+                        <form method="post" action="/devices/{{.ID}}/revoke"
+                              onsubmit="return confirm('Revoke device {{.Name}}?')">
+                            <button type="submit" class="btn btn-danger btn-sm">Revoke</button>
+                        </form>
+                    {{else if eq .Status "revoked"}}
+                        <form method="post" action="/devices/{{.ID}}/remove"
+                              onsubmit="return confirm('Remove device {{.Name}}?')">
+                            <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+                        </form>
                     {{end}}
-                {{else if eq .Status "approved"}}
-                    <form method="post" action="/devices/{{.ID}}/revoke"
-                          onsubmit="return confirm('Revoke device {{.Name}}?')">
-                        <button type="submit" class="outline secondary">Revoke</button>
-                    </form>
-                {{else if eq .Status "revoked"}}
-                    <form method="post" action="/devices/{{.ID}}/remove"
-                          onsubmit="return confirm('Remove device {{.Name}}?')">
-                        <button type="submit" class="outline secondary">Remove</button>
-                    </form>
-                {{end}}
-            </td>
-        </tr>
-        {{end}}
-    </tbody>
-</table>
-</figure>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
 {{else}}
-<p>No devices enrolled yet. Generate a token and enroll your first device.</p>
+<p style="color:var(--text-secondary)">No devices enrolled yet. Generate a token and enroll your first device.</p>
 {{end}}
 {{end}}
 {{template "layout" .}}
