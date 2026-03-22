@@ -633,6 +633,7 @@ to:
 ```go
 s.renderTemplate(w, "devices.html", map[string]any{
     "Devices":       devices,
+    "ActivePage":    "devices",
     "TotalCount":    len(devices),
     "ApprovedCount": countByStatus(devices, model.StatusApproved),
     "PendingCount":  countByStatus(devices, model.StatusPending),
@@ -640,7 +641,31 @@ s.renderTemplate(w, "devices.html", map[string]any{
 })
 ```
 
-- [ ] **Step 4: Rename CSS route and ReadFile path**
+- [ ] **Step 4: Add `ActivePage` to tokens and audit handlers**
+
+In `handleTokens` (GET branch), add `"ActivePage": "tokens"` to the template data map:
+
+```go
+s.renderTemplate(w, "tokens.html", map[string]any{
+    "Tokens":      active,
+    "ShortCodes":  activeShortCodes,
+    "ExternalURL": s.externalURL,
+    "ActivePage":  "tokens",
+})
+```
+
+In `handleAudit`, add `"ActivePage": "audit"` to the template data map:
+
+```go
+s.renderTemplate(w, "audit.html", map[string]any{
+    "Entries":    entries,
+    "ActivePage": "audit",
+})
+```
+
+The login handler does not need `ActivePage` — the layout template hides the nav when it's absent.
+
+- [ ] **Step 5: Rename CSS route and ReadFile path**
 
 Change line 127:
 ```go
@@ -660,16 +685,16 @@ to:
 data, err := templateFS.ReadFile("templates/theme.css")
 ```
 
-- [ ] **Step 5: Verify it compiles**
+- [ ] **Step 6: Verify it compiles**
 
 Run: `go vet ./internal/hub/...`
 Expected: No errors.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add internal/hub/server.go
-git commit -m "feat: update server.go for theme.css route and new template funcs"
+git commit -m "feat: update server.go for theme.css route, ActivePage, and new template funcs"
 ```
 
 ---
@@ -705,72 +730,7 @@ git commit -m "chore: remove pico.min.css — replaced by theme.css"
 
 - [ ] **Step 1: Replace layout.html contents**
 
-```html
-{{define "layout"}}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="light dark">
-    <title>SSH Vault — {{template "title" .}}</title>
-    <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
-    <link rel="stylesheet" href="/static/theme.css">
-</head>
-<body>
-    <nav class="top-bar">
-        <div class="top-inner">
-            <a class="top-brand" href="/">
-                <img src="/static/logo.svg" alt="SSH Vault" style="width:26px;height:26px;border-radius:6px">
-                SSH Vault
-            </a>
-            <ul class="top-nav">
-                <li><a href="/"{{if eq (template "title" .) "Devices"}} class="active"{{end}}>Devices</a></li>
-                <li><a href="/tokens"{{if eq (template "title" .) "Tokens"}} class="active"{{end}}>Tokens</a></li>
-                <li><a href="/audit"{{if eq (template "title" .) "Audit Log"}} class="active"{{end}}>Audit Log</a></li>
-            </ul>
-            <div class="top-right">
-                <form action="/logout" method="post" style="margin:0">
-                    <button type="submit" class="btn-logout">Log out</button>
-                </form>
-            </div>
-        </div>
-    </nav>
-    <div class="container">
-        {{template "content" .}}
-    </div>
-    <script>
-    document.querySelectorAll("td, small").forEach(function(el) {
-        var text = el.textContent.trim();
-        if (/^\d{4}-\d{2}-\d{2}T/.test(text)) {
-            var d = new Date(text);
-            if (!isNaN(d)) {
-                el.textContent = d.toLocaleString(undefined, {
-                    year: "numeric", month: "2-digit", day: "2-digit",
-                    hour: "2-digit", minute: "2-digit"
-                });
-            }
-        }
-    });
-    </script>
-</body>
-</html>
-{{end}}
-```
-
-**Note:** The `{{if eq (template "title" .) "..."}}` pattern for active nav will NOT work in Go templates — `template` is an action, not a function. Instead, use a simpler approach: remove the active class from layout entirely and add a `<style>` override per page (or just leave all links unstyled — the URL bar shows which page you're on). Alternatively, pass an `ActivePage` string from each handler.
-
-**Better approach — pass `ActivePage` from handlers:** Each handler already passes a map. Add `"ActivePage": "devices"` (or `"tokens"`, `"audit"`) to each handler's template data. Then in layout:
-
-```html
-<li><a href="/"{{if eq .ActivePage "devices"}} class="active"{{end}}>Devices</a></li>
-<li><a href="/tokens"{{if eq .ActivePage "tokens"}} class="active"{{end}}>Tokens</a></li>
-<li><a href="/audit"{{if eq .ActivePage "audit"}} class="active"{{end}}>Audit Log</a></li>
-```
-
-This requires adding `"ActivePage": "devices"` to `handleDashboard`, `"ActivePage": "tokens"` to `handleTokens`, `"ActivePage": "audit"` to `handleAudit`. The login page does not use the nav layout so it doesn't need this.
-
-Update `layout.html` to use `.ActivePage`:
+Uses `.ActivePage` (set by each handler in Task 2) to highlight the active nav link. The `{{if .ActivePage}}` guard hides the nav on the login page (which has no `ActivePage` key in its template data).
 
 ```html
 {{define "layout"}}
@@ -827,36 +787,17 @@ Update `layout.html` to use `.ActivePage`:
 {{end}}
 ```
 
-- [ ] **Step 2: Add `ActivePage` to all dashboard handlers in server.go**
+**Note:** `ActivePage` was already added to all handlers in Task 2, Step 3-4. The login handler has no `ActivePage` key, so the `{{if .ActivePage}}` guard hides the nav on the login page.
 
-In `handleDashboard`:
-```go
-"ActivePage": "devices",
-```
-
-In `handleTokens` (GET branch):
-```go
-"ActivePage": "tokens",
-```
-
-In `handleAudit`:
-```go
-"ActivePage": "audit",
-```
-
-The login handler passes `map[string]any{"Error": true}` or `nil` — no `ActivePage` needed. The `{{if .ActivePage}}` guard in layout hides the nav for login.
-
-**Important:** `handleLogin` renders with `map[string]any{"Error": true}` on failure and `nil` on GET. Since `.ActivePage` on a nil map will be falsy, the nav is hidden. But on error, `map[string]any{"Error": true}` has no `ActivePage` key, so `.ActivePage` returns empty string which is falsy — nav is hidden. This works correctly.
-
-- [ ] **Step 3: Verify it compiles**
+- [ ] **Step 2: Verify it compiles**
 
 Run: `go vet ./internal/hub/...`
 Expected: No errors.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add internal/hub/templates/layout.html internal/hub/server.go
+git add internal/hub/templates/layout.html
 git commit -m "feat: rewrite layout.html with new nav and theme.css link"
 ```
 
