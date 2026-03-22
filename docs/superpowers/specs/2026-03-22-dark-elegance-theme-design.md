@@ -19,7 +19,7 @@ Replace the current Pico CSS framework and inline styles with a single custom `t
 | Edit     | `templates/tokens.html` | cmd-block, token-chip, updated buttons, confirm dialog restyled |
 | Edit     | `templates/audit.html`  | Pill badges with event-to-pill mapping, secondary text styling |
 | Edit     | `templates/login.html`  | Centered card with gradient heading. Replace `var(--pico-del-color)` on error paragraph with `var(--red)` |
-| Edit     | `server.go`             | Rename static route path AND `ReadFile` call inside `handleStaticCSS` body (line 244: `templates/pico.min.css` → `templates/theme.css`), add `countByStatus` helper, add `eventPillClass` template function |
+| Edit     | `server.go`             | Rename static route path (line 127) AND `ReadFile` call inside `handleStaticCSS` body (line 244): both `templates/pico.min.css` → `templates/theme.css`. Add `countByStatus` helper, add `eventPillClass` to `funcMap` |
 
 No new Go dependencies. Existing template functions (`formatTime`, `formatTimePtr`, `formatFingerprint`, `isStale`, `upper`) remain unchanged. One new template function added: `eventPillClass`.
 
