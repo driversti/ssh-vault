@@ -328,7 +328,8 @@ if [ -n "${VAULT_TMPDIR:-}" ]; then
         esac
     fi
     rm -rf "$VAULT_TMPDIR"
-    echo "Installed: $(command -v ssh-vault 2>/dev/null || echo "${INSTALL_DIR}/ssh-vault")"
+    VAULT_BIN="${INSTALL_DIR}/ssh-vault"
+    echo "Installed: $(command -v ssh-vault 2>/dev/null || echo "${VAULT_BIN}")"
 fi
 
 echo ""
