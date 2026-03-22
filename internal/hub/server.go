@@ -125,6 +125,7 @@ func (s *Server) registerRoutes() {
 
 	// Static assets
 	s.mux.HandleFunc("/static/pico.min.css", s.handleStaticCSS)
+	s.mux.HandleFunc("/static/logo.svg", s.handleStaticLogo)
 
 	// Health check (no auth)
 	s.mux.HandleFunc("/healthz", s.handleHealthz)
@@ -246,6 +247,18 @@ func (s *Server) handleStaticCSS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/css")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Write(data)
+}
+
+// handleStaticLogo serves the embedded SVG logo file.
+func (s *Server) handleStaticLogo(w http.ResponseWriter, r *http.Request) {
+	data, err := templateFS.ReadFile("templates/logo.svg")
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "image/svg+xml")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.Write(data)
 }

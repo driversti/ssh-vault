@@ -1,0 +1,16 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="128" y="128" width="768" height="768" rx="180" fill="#1A1B26"/>
+    
+    <rect x="312" y="450" width="400" height="320" rx="40" fill="#24283B" stroke="#414868" stroke-width="20"/>
+    
+    <path d="M400 450V340C400 279.249 451.492 230 512 230C572.508 230 624 279.249 624 340V450" 
+          stroke="#7AA2F7" stroke-width="60" stroke-linecap="round"/>
+          
+    <rect x="460" y="560" width="104" height="20" rx="4" fill="#73DACA">
+        <animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite" />
+    </rect>
+    
+    <circle cx="512" cy="340" r="30" fill="#7AA2F7"/>
+    <circle cx="400" cy="380" r="20" fill="#7AA2F7"/>
+    <circle cx="624" cy="380" r="20" fill="#7AA2F7"/>
+</svg>
