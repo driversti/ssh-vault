@@ -15,13 +15,13 @@ Replace the current Pico CSS framework and inline styles with a single custom `t
 | Create   | `templates/theme.css`   | All styles — CSS variables, light/dark palettes, components    |
 | Delete   | `templates/pico.min.css`| No longer needed                                              |
 | Edit     | `templates/layout.html` | Remove inline `<style>`, add `color-scheme` meta, update `<link>` href, rework nav to segmented control |
-| Edit     | `templates/devices.html`| Device avatars, pill badges, stats bar, stale dot              |
-| Edit     | `templates/tokens.html` | cmd-block, token-chip, updated buttons                         |
-| Edit     | `templates/audit.html`  | Pill badges, secondary text styling                            |
-| Edit     | `templates/login.html`  | Centered card with gradient heading                            |
-| Edit     | `server.go`             | Rename static route, update file path, add `countByStatus` helper |
+| Edit     | `templates/devices.html`| Device avatars, pill badges, stats bar, stale dot. Remove standalone Fingerprint column — move `formatFingerprint` output into device cell as `.device-info-fp` |
+| Edit     | `templates/tokens.html` | cmd-block, token-chip, updated buttons, confirm dialog restyled |
+| Edit     | `templates/audit.html`  | Pill badges with event-to-pill mapping, secondary text styling |
+| Edit     | `templates/login.html`  | Centered card with gradient heading. Replace `var(--pico-del-color)` on error paragraph with `var(--red)` |
+| Edit     | `server.go`             | Rename static route path AND `ReadFile` call inside `handleStaticCSS` body (line 244: `templates/pico.min.css` → `templates/theme.css`), add `countByStatus` helper, add `eventPillClass` template function |
 
-No new Go dependencies. Template functions (`formatTime`, `formatTimePtr`, `formatFingerprint`, `isStale`, `upper`) remain unchanged.
+No new Go dependencies. Existing template functions (`formatTime`, `formatTimePtr`, `formatFingerprint`, `isStale`, `upper`) remain unchanged. One new template function added: `eventPillClass`.
 
 ## Theme System
 
@@ -87,10 +87,40 @@ Active nav link gets `--nav-active-bg` background + subtle shadow.
 
 Pill-shaped badges (`border-radius: 100px`) with a 5px glowing dot (`box-shadow: 0 0 6px currentColor`).
 
-Six variants mapped to template status values:
+Variants for device status (used in `devices.html` via `pill-{{.Status}}`):
 - `pill-approved` — green
 - `pill-pending` — yellow
 - `pill-revoked` — red
+
+Variants for audit events (used in `audit.html` via `pill-{{eventPillClass .Event}}`):
+- `pill-approved` — green (event: `approved`)
+- `pill-enrolled` — green (event: `enrolled`)
+- `pill-revoked` — red (events: `revoked`, `auth_failed`)
+- `pill-used` — teal (events: `token_used`, `shortcode_used`, `shortcode_created`)
+- `pill-expired` — muted gray (events: `token_removed`, `shortcode_expired`)
+
+A new `eventPillClass` template function in `server.go` maps event strings to pill class suffixes:
+
+```go
+"eventPillClass": func(event string) string {
+    switch event {
+    case "approved":
+        return "approved"
+    case "enrolled":
+        return "enrolled"
+    case "revoked", "auth_failed":
+        return "revoked"
+    case "token_used", "shortcode_used", "shortcode_created":
+        return "used"
+    case "token_removed", "shortcode_expired":
+        return "expired"
+    default:
+        return "expired"
+    }
+},
+```
+
+Variants for token/short-code status (used in `tokens.html`):
 - `pill-active` — green
 - `pill-used` — teal
 - `pill-expired` — muted gray
@@ -104,11 +134,25 @@ Pill-shaped (`border-radius: 100px`). Three variants:
 
 Size modifier: `.btn-sm` for table action buttons.
 
+### Confirm Dialog (Tokens Page)
+
+The existing `<dialog>` for token removal confirmation is preserved and restyled:
+- Dialog backdrop: `rgba(0,0,0,0.25)` with `backdrop-filter: blur(2px)`
+- Dialog card: `--bg-elevated` background, `--border`, 16px radius, max-width 360px
+- Cancel button: `.btn-secondary` styling
+- Confirm button: `.btn-danger` styling
+- CSS classes: `.confirm-dialog`, `.btn-cancel` → `.btn-secondary`, `.btn-confirm` → `.btn-danger`
+
+### Copy Button
+
+`.copy-btn`: borderless icon button, `color: var(--text-tertiary)`, hover changes to `var(--accent)`. This replaces the current Pico-dependent definition in the inline `<style>` block — both definitions must not coexist.
+
 ### Device Rows
 
 - 36px avatar box: gradient background (`--bg-secondary` to `--bg-tertiary`), monitor SVG icon
-- Name (font-weight 500) + fingerprint in monospace below
+- Name (font-weight 500) + fingerprint in monospace below (fingerprint moves from its own column into the device cell as `.device-info-fp`)
 - Stale rows: `opacity: 0.45` + glowing red dot (`box-shadow: 0 0 6px var(--red)`) after name
+- "Awaiting verification" text for unverified pending devices: styled with `color: var(--text-secondary); font-size: 0.82rem`
 
 ### Stats Bar (Devices Page)
 
@@ -166,14 +210,19 @@ All other handlers pass the same data as before.
 | `/static/pico.min.css`       | `/static/theme.css`         |
 | reads `templates/pico.min.css` | reads `templates/theme.css` |
 
-The `handleStaticCSS` function and its caching headers remain identical — only the route path and embedded file path change.
+Two changes inside `handleStaticCSS`:
+1. Route registration: `"/static/pico.min.css"` → `"/static/theme.css"`
+2. Function body `ReadFile` call: `templateFS.ReadFile("templates/pico.min.css")` → `templateFS.ReadFile("templates/theme.css")`
+
+Caching headers remain identical.
 
 ## Migration & Compatibility
 
 **Removed:**
-- `pico.min.css` (~83KB embedded file)
-- Inline `<style>` block in `layout.html`
-- `data-theme="light"` attribute
+- `pico.min.css` (~83KB embedded file) — must be `git rm`'d since `//go:embed templates/*` would otherwise silently embed the dead file
+- Inline `<style>` block in `layout.html` — all styles (including `.copy-btn`, `.confirm-dialog`, `.btn-cancel`, `.btn-confirm`) move to `theme.css`. Both must not coexist to avoid cascade conflicts.
+- `data-theme="light"` attribute (Pico-specific)
+- `var(--pico-del-color)` in `login.html` error message → replaced with `var(--red)`
 
 **Preserved:**
 - All Go handlers, template functions, form actions, URL paths
