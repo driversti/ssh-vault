@@ -87,7 +87,7 @@ func NewServer(cfg ServerConfig) *Server {
 				return "enrolled"
 			case "revoked", "auth_failed":
 				return "revoked"
-			case "token_used", "shortcode_used", "shortcode_created":
+			case "token_used", "shortcode_used", "shortcode_created", "device_renamed":
 				return "used"
 			case "token_removed", "shortcode_expired":
 				return "expired"
@@ -307,6 +307,8 @@ func (s *Server) handleDeviceAction(w http.ResponseWriter, r *http.Request) {
 		s.handleRevoke(w, r)
 	case strings.HasSuffix(path, "/remove"):
 		s.handleRemoveDevice(w, r)
+	case strings.HasSuffix(path, "/rename"):
+		s.handleRename(w, r)
 	default:
 		http.NotFound(w, r)
 	}
