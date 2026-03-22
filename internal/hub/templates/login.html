@@ -1,15 +1,19 @@
 {{define "title"}}Login{{end}}
 {{define "content"}}
-<article style="max-width: 400px; margin: 10vh auto 0;">
-    <header><h2>SSH Vault</h2></header>
-    {{if .Error}}
-    <p style="color: var(--pico-del-color);">Invalid password. Please try again.</p>
-    {{end}}
-    <form method="post" action="/login">
-        <label for="password">Dashboard Password</label>
-        <input type="password" id="password" name="password" required autofocus>
-        <button type="submit">Log In</button>
-    </form>
-</article>
+<div class="login-wrap">
+    <div class="login-card">
+        <img src="/static/logo.svg" alt="SSH Vault" style="width:52px;height:52px;border-radius:13px">
+        <h2>SSH Vault</h2>
+        <p class="sub">Enter your password to continue</p>
+        {{if .Error}}
+        <p class="error">Invalid password. Please try again.</p>
+        {{end}}
+        <form method="post" action="/login">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" required autofocus placeholder="Dashboard password">
+            <button type="submit" class="btn btn-primary">Log In</button>
+        </form>
+    </div>
+</div>
 {{end}}
 {{template "layout" .}}
