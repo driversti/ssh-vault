@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/driversti/ssh-vault/internal/agent"
@@ -157,10 +159,25 @@ func runEnroll(args []string) error {
 		*name = h
 	}
 
+	resolvedKeyPath := expandHome(*keyPath)
+
+	// Ensure SSH key exists; prompt user if missing
+	resolvedKeyPath, err := agent.EnsureSSHKey(resolvedKeyPath, func(msg string) bool {
+		fmt.Printf("%s (y/n): ", msg)
+		scanner := bufio.NewScanner(os.Stdin)
+		if scanner.Scan() {
+			return strings.TrimSpace(strings.ToLower(scanner.Text())) == "y"
+		}
+		return false
+	})
+	if err != nil {
+		return err
+	}
+
 	cfg, err := agent.Enroll(agent.EnrollConfig{
 		HubURL:  *hubURL,
 		Token:   *token,
-		KeyPath: expandHome(*keyPath),
+		KeyPath: resolvedKeyPath,
 		Name:    *name,
 	})
 	if err != nil {

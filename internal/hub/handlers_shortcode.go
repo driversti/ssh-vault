@@ -283,10 +283,18 @@ done
 
 if [ -z "$SSH_KEY" ]; then
     echo ""
-    echo "Error: No SSH public key found in ~/.ssh/"
-    echo "Please generate one first:"
-    echo "  ssh-keygen -t ed25519"
-    exit 1
+    echo "No SSH public key found in ~/.ssh/ — generating one..."
+    if ! command -v ssh-keygen >/dev/null 2>&1; then
+        echo "Error: ssh-keygen not found. Please install OpenSSH and retry."
+        exit 1
+    fi
+    mkdir -p -m 700 ~/.ssh
+    if ! ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N "" -q; then
+        echo "Error: Failed to generate SSH key pair."
+        exit 1
+    fi
+    SSH_KEY=~/.ssh/id_ed25519.pub
+    echo "Generated new SSH key pair: ~/.ssh/id_ed25519"
 fi
 
 SSH_PRIVATE_KEY="${SSH_KEY%%.pub}"
@@ -320,7 +328,8 @@ if [ -n "${VAULT_TMPDIR:-}" ]; then
         esac
     fi
     rm -rf "$VAULT_TMPDIR"
-    echo "Installed: $(command -v ssh-vault 2>/dev/null || echo "${INSTALL_DIR}/ssh-vault")"
+    VAULT_BIN="${INSTALL_DIR}/ssh-vault"
+    echo "Installed: $(command -v ssh-vault 2>/dev/null || echo "${VAULT_BIN}")"
 fi
 
 echo ""
