@@ -79,6 +79,22 @@ func NewServer(cfg ServerConfig) *Server {
 			return time.Since(*d.LastSyncAt) > 15*time.Minute
 		},
 		"upper": strings.ToUpper,
+		"eventPillClass": func(event string) string {
+			switch event {
+			case "approved":
+				return "approved"
+			case "enrolled":
+				return "enrolled"
+			case "revoked", "auth_failed":
+				return "revoked"
+			case "token_used", "shortcode_used", "shortcode_created":
+				return "used"
+			case "token_removed", "shortcode_expired":
+				return "expired"
+			default:
+				return "expired"
+			}
+		},
 	}
 
 	// Parse each page template individually with the layout to avoid
@@ -124,7 +140,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/logout", s.handleLogout)
 
 	// Static assets
-	s.mux.HandleFunc("/static/pico.min.css", s.handleStaticCSS)
+	s.mux.HandleFunc("/static/theme.css", s.handleStaticCSS)
 	s.mux.HandleFunc("/static/logo.svg", s.handleStaticLogo)
 
 	// Health check (no auth)
@@ -163,7 +179,12 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		return order[devices[i].Status] < order[devices[j].Status]
 	})
 	s.renderTemplate(w, "devices.html", map[string]any{
-		"Devices": devices,
+		"Devices":       devices,
+		"ActivePage":    "devices",
+		"TotalCount":    len(devices),
+		"ApprovedCount": countByStatus(devices, model.StatusApproved),
+		"PendingCount":  countByStatus(devices, model.StatusPending),
+		"RevokedCount":  countByStatus(devices, model.StatusRevoked),
 	})
 }
 
@@ -207,6 +228,7 @@ func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {
 			"Tokens":      active,
 			"ShortCodes":  activeShortCodes,
 			"ExternalURL": s.externalURL,
+			"ActivePage":  "tokens",
 		})
 	case http.MethodPost:
 		tok, err := model.NewToken(24 * time.Hour)
@@ -235,13 +257,14 @@ func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 		entries[i], entries[j] = entries[j], entries[i]
 	}
 	s.renderTemplate(w, "audit.html", map[string]any{
-		"Entries": entries,
+		"Entries":    entries,
+		"ActivePage": "audit",
 	})
 }
 
 // handleStaticCSS serves the embedded Pico CSS file.
 func (s *Server) handleStaticCSS(w http.ResponseWriter, r *http.Request) {
-	data, err := templateFS.ReadFile("templates/pico.min.css")
+	data, err := templateFS.ReadFile("templates/theme.css")
 	if err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
@@ -336,6 +359,17 @@ func (s *Server) requireSession(next http.HandlerFunc) http.HandlerFunc {
 func deviceFromContext(ctx context.Context) *model.Device {
 	d, _ := ctx.Value(deviceContextKey).(*model.Device)
 	return d
+}
+
+// countByStatus returns the number of devices with the given status.
+func countByStatus(devices []model.Device, status string) int {
+	n := 0
+	for _, d := range devices {
+		if d.Status == status {
+			n++
+		}
+	}
+	return n
 }
 
 // renderTemplate renders a named template with the given data.
