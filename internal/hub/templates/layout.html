@@ -8,6 +8,9 @@
     <title>SSH Vault — {{template "title" .}}</title>
     <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
     <link rel="stylesheet" href="/static/theme.css">
+    <script>
+    (function(){var t=localStorage.getItem('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();
+    </script>
 </head>
 <body>
     {{if .ActivePage}}
@@ -23,6 +26,9 @@
                 <li><a href="/audit"{{if eq .ActivePage "audit"}} class="active"{{end}}>Audit Log</a></li>
             </ul>
             <div class="top-right">
+                <button class="theme-btn" id="themeToggle" title="Toggle theme" onclick="cycleTheme()">
+                    <svg id="theme-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"></svg>
+                </button>
                 <form action="/logout" method="post" style="margin:0">
                     <button type="submit" class="btn-logout">Log out</button>
                 </form>
@@ -46,6 +52,42 @@
             }
         }
     });
+    </script>
+    <script>
+    (function() {
+        var iconSun = '<circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>';
+        var iconMoon = '<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>';
+        var iconAuto = '<circle cx="12" cy="12" r="9"/><path d="M12 3v18"/><path d="M12 3a9 9 0 010 18" fill="currentColor" opacity="0.3"/>';
+        var modes = ['system', 'light', 'dark'];
+        var titles = { system: 'System theme', light: 'Light theme', dark: 'Dark theme' };
+        var icons = { system: iconAuto, light: iconSun, dark: iconMoon };
+
+        function getMode() { return localStorage.getItem('theme') || 'system'; }
+
+        function applyMode(mode) {
+            var el = document.documentElement;
+            if (mode === 'system') {
+                el.removeAttribute('data-theme');
+            } else {
+                el.setAttribute('data-theme', mode);
+            }
+            var btn = document.getElementById('themeToggle');
+            var icon = document.getElementById('theme-icon');
+            if (btn && icon) {
+                icon.innerHTML = icons[mode];
+                btn.title = titles[mode];
+            }
+        }
+
+        window.cycleTheme = function() {
+            var current = getMode();
+            var next = modes[(modes.indexOf(current) + 1) % modes.length];
+            localStorage.setItem('theme', next);
+            applyMode(next);
+        };
+
+        applyMode(getMode());
+    })();
     </script>
 </body>
 </html>
