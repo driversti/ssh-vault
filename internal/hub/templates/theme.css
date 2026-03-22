@@ -478,7 +478,7 @@ code {
 }
 
 /* ── Actions ── */
-.actions { display: flex; gap: 0.4rem; align-items: center; }
+.actions { vertical-align: middle; }
 .actions form { display: inline; }
 
 /* ── Section ── */
@@ -597,7 +597,7 @@ code {
 .login-card .error { color: var(--red); font-size: 0.85rem; margin-bottom: 1rem; }
 
 /* ── Confirm Dialog ── */
-.confirm-dialog { background-color: rgba(0,0,0,0.25); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); border: none; border-radius: 16px; padding: 0; }
+.confirm-dialog { background: transparent; border: none; border-radius: 16px; padding: 0; margin: auto; }
 .confirm-dialog::backdrop { background: rgba(0,0,0,0.25); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
 .confirm-dialog .dialog-body { background: var(--bg-elevated); border: 0.5px solid var(--border); border-radius: 16px; padding: 1.5em; max-width: 360px; }
 .confirm-dialog h4 { margin: 0 0 0.5em; font-size: 1.05em; font-weight: 600; color: var(--text); }
