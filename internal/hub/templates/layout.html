@@ -1,57 +1,38 @@
 {{define "layout"}}
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
     <title>SSH Vault — {{template "title" .}}</title>
     <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
-    <link rel="stylesheet" href="/static/pico.min.css">
-    <style>
-        .badge { display: inline-block; padding: 0.2em 0.6em; border-radius: 4px; font-size: 0.8em; font-weight: bold; }
-        .badge-pending { background: #ffc107; color: #000; }
-        .badge-approved { background: #28a745; color: #fff; }
-        .badge-revoked { background: #dc3545; color: #fff; }
-        .badge-token_used { background: #17a2b8; color: #fff; }
-        .badge-token_removed { background: #fd7e14; color: #fff; }
-        .stale { opacity: 0.6; }
-        .stale::after { content: " (stale)"; font-size: 0.8em; color: #dc3545; }
-        .token-value { font-family: monospace; background: var(--pico-muted-border-color); padding: 0.3em 0.6em; border-radius: 4px; user-select: all; }
-        .copy-btn { background: none; border: none; cursor: pointer; padding: 0.2em 0.4em; opacity: 0.6; vertical-align: middle; }
-        .copy-btn:hover { opacity: 1; }
-        nav { margin-bottom: 1em; }
-        .actions form { display: inline; }
-        .confirm-dialog { background-color: rgba(0,0,0,0.25); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
-        .confirm-dialog > article { max-width: 360px; border-radius: 8px; box-shadow: 0 8px 30px rgba(0,0,0,0.12); padding: 1.5em; }
-        .confirm-dialog > article > h4 { margin: 0 0 0.5em; font-size: 1.05em; }
-        .confirm-dialog > article > p { margin: 0 0 1.5em; font-size: 0.9em; color: var(--pico-muted-color); line-height: 1.5; }
-        .confirm-dialog > article > footer { padding: 0; display: flex; gap: 0.5em; justify-content: flex-end; }
-        .confirm-dialog > article > footer button { width: auto; padding: 0.45em 1.1em; border-radius: 6px; font-size: 0.85em; font-weight: 500; margin: 0; }
-        .confirm-dialog > article > footer .btn-cancel { background: none; border: 1px solid var(--pico-muted-border-color); color: var(--pico-muted-color); }
-        .confirm-dialog > article > footer .btn-cancel:hover { border-color: var(--pico-color); color: var(--pico-color); }
-        .confirm-dialog > article > footer .btn-confirm { background: #dc3545; border: none; color: #fff; }
-        .confirm-dialog > article > footer .btn-confirm:hover { background: #c82333; }
-    </style>
+    <link rel="stylesheet" href="/static/theme.css">
 </head>
 <body>
-    <main class="container">
-        <nav>
-            <ul>
-                <li><img src="/static/logo.svg" alt="SSH Vault" style="height:2em;vertical-align:middle;margin-right:0.4em;border-radius:4px"><strong>SSH Vault</strong></li>
+    {{if .ActivePage}}
+    <nav class="top-bar">
+        <div class="top-inner">
+            <a class="top-brand" href="/">
+                <img src="/static/logo.svg" alt="SSH Vault" style="width:26px;height:26px;border-radius:6px">
+                SSH Vault
+            </a>
+            <ul class="top-nav">
+                <li><a href="/"{{if eq .ActivePage "devices"}} class="active"{{end}}>Devices</a></li>
+                <li><a href="/tokens"{{if eq .ActivePage "tokens"}} class="active"{{end}}>Tokens</a></li>
+                <li><a href="/audit"{{if eq .ActivePage "audit"}} class="active"{{end}}>Audit Log</a></li>
             </ul>
-            <ul>
-                <li><a href="/">Devices</a></li>
-                <li><a href="/tokens">Tokens</a></li>
-                <li><a href="/audit">Audit Log</a></li>
-                <li>
-                    <form action="/logout" method="post" style="margin:0">
-                        <button type="submit" class="outline secondary" style="padding:0.3em 0.8em;margin:0">Logout</button>
-                    </form>
-                </li>
-            </ul>
-        </nav>
+            <div class="top-right">
+                <form action="/logout" method="post" style="margin:0">
+                    <button type="submit" class="btn-logout">Log out</button>
+                </form>
+            </div>
+        </div>
+    </nav>
+    {{end}}
+    <div class="container">
         {{template "content" .}}
-    </main>
+    </div>
     <script>
     document.querySelectorAll("td, small").forEach(function(el) {
         var text = el.textContent.trim();
