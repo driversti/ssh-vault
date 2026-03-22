@@ -1,7 +1,7 @@
 {{define "title"}}Audit Log{{end}}
 {{define "content"}}
 <div class="page-header">
-    <h1>Audit Log</h1>
+    <h1>Audit Log{{if .Pagination.TotalItems}} <span style="font-weight:400;font-size:0.9rem;color:var(--text-secondary)">({{.Pagination.TotalItems}} {{if eq .Pagination.TotalItems 1}}entry{{else}}entries{{end}})</span>{{end}}</h1>
 </div>
 
 {{if .Entries}}
@@ -27,6 +27,33 @@
         </tbody>
     </table>
 </div>
+
+{{if gt .Pagination.TotalPages 1}}
+<nav class="pagination">
+    {{if .Pagination.HasPrev}}
+        <a href="/audit?page={{.Pagination.PrevPage}}" class="pagination-link">&laquo; Previous</a>
+    {{else}}
+        <span class="pagination-link pagination-disabled">&laquo; Previous</span>
+    {{end}}
+
+    {{range .Pagination.Pages}}
+        {{if .IsGap}}
+            <span class="pagination-ellipsis">&hellip;</span>
+        {{else if .IsActive}}
+            <span class="pagination-link pagination-active">{{.Number}}</span>
+        {{else}}
+            <a href="/audit?page={{.Number}}" class="pagination-link">{{.Number}}</a>
+        {{end}}
+    {{end}}
+
+    {{if .Pagination.HasNext}}
+        <a href="/audit?page={{.Pagination.NextPage}}" class="pagination-link">Next &raquo;</a>
+    {{else}}
+        <span class="pagination-link pagination-disabled">Next &raquo;</span>
+    {{end}}
+</nav>
+{{end}}
+
 {{else}}
 <p style="color:var(--text-secondary)">No audit entries yet.</p>
 {{end}}

@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -249,15 +250,29 @@ func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleAudit shows the audit log.
+// handleAudit shows the paginated audit log.
 func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 	entries := s.store.ListAuditLog()
 	// Reverse chronological order
 	for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
 		entries[i], entries[j] = entries[j], entries[i]
 	}
+
+	const pageSize = 20
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	pg := calcPagination(len(entries), page, pageSize)
+
+	// Slice entries to the current page window.
+	var pageEntries []model.AuditEntry
+	if len(entries) > 0 {
+		start := (pg.CurrentPage - 1) * pageSize
+		end := min(start+pageSize, len(entries))
+		pageEntries = entries[start:end]
+	}
+
 	s.renderTemplate(w, "audit.html", map[string]any{
-		"Entries":    entries,
+		"Entries":    pageEntries,
+		"Pagination": pg,
 		"ActivePage": "audit",
 	})
 }
