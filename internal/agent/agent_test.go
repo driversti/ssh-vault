@@ -31,7 +31,7 @@ func TestSyncOnce_HubUp(t *testing.T) {
 		AuthKeysPath: authKeysPath,
 	}
 
-	if err := syncOnce(cfg); err != nil {
+	if err := SyncOnce(cfg); err != nil {
 		t.Fatalf("syncOnce: %v", err)
 	}
 
@@ -61,7 +61,7 @@ func TestSyncOnce_HubUnreachable_DoesNotModifyFile(t *testing.T) {
 		AuthKeysPath: authKeysPath,
 	}
 
-	err := syncOnce(cfg)
+	err := SyncOnce(cfg)
 	if err == nil {
 		t.Fatal("expected error for unreachable hub")
 	}
@@ -89,7 +89,7 @@ func TestSyncOnce_DeviceRevoked(t *testing.T) {
 		AuthKeysPath: filepath.Join(t.TempDir(), "authorized_keys"),
 	}
 
-	err := syncOnce(cfg)
+	err := SyncOnce(cfg)
 	if err == nil {
 		t.Fatal("expected error for revoked device")
 	}
@@ -116,12 +116,12 @@ func TestSyncOnce_HubRecovers(t *testing.T) {
 	}
 
 	// First sync works
-	if err := syncOnce(cfg); err != nil {
+	if err := SyncOnce(cfg); err != nil {
 		t.Fatalf("first sync: %v", err)
 	}
 
 	// Second sync also works (simulating recovery)
-	if err := syncOnce(cfg); err != nil {
+	if err := SyncOnce(cfg); err != nil {
 		t.Fatalf("second sync: %v", err)
 	}
 

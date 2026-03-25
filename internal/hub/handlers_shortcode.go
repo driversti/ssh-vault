@@ -208,6 +208,13 @@ esac
 
 echo "Platform: ${OS}/${ARCH}"
 
+# Detect Termux environment
+IS_TERMUX=false
+if [ -n "${TERMUX_VERSION:-}" ]; then
+    IS_TERMUX=true
+    echo "Termux environment detected (version ${TERMUX_VERSION})"
+fi
+
 # Check for existing installation
 EXISTING_BIN="$(command -v ssh-vault 2>/dev/null || true)"
 if [ -n "$EXISTING_BIN" ]; then
@@ -226,7 +233,12 @@ else
     elif command -v wget >/dev/null 2>&1; then
         wget -qO "$VAULT_BIN" "$BINARY_URL"
     else
-        echo "Error: Neither curl nor wget found. Please install one and try again."
+        if [ "$IS_TERMUX" = true ]; then
+            echo "Error: Neither curl nor wget found."
+            echo "Install with: pkg install curl"
+        else
+            echo "Error: Neither curl nor wget found. Please install one and try again."
+        fi
         exit 1
     fi
 
@@ -285,7 +297,12 @@ if [ -z "$SSH_KEY" ]; then
     echo ""
     echo "No SSH public key found in ~/.ssh/ — generating one..."
     if ! command -v ssh-keygen >/dev/null 2>&1; then
-        echo "Error: ssh-keygen not found. Please install OpenSSH and retry."
+        if [ "$IS_TERMUX" = true ]; then
+            echo "Error: ssh-keygen not found."
+            echo "Install with: pkg install openssh"
+        else
+            echo "Error: ssh-keygen not found. Please install OpenSSH and retry."
+        fi
         exit 1
     fi
     mkdir -p -m 700 ~/.ssh
@@ -313,8 +330,12 @@ echo ""
 
 # Install binary to PATH if it was downloaded to a temp dir
 if [ -n "${VAULT_TMPDIR:-}" ]; then
-    INSTALL_DIR="/usr/local/bin"
-    if [ -w "$INSTALL_DIR" ] || { command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; }; then
+    if [ "$IS_TERMUX" = true ]; then
+        INSTALL_DIR="${PREFIX}/bin"
+        echo "Installing ssh-vault to ${INSTALL_DIR}..."
+        install -m 755 "$VAULT_BIN" "${INSTALL_DIR}/ssh-vault"
+    elif [ -w "/usr/local/bin" ] || { command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; }; then
+        INSTALL_DIR="/usr/local/bin"
         echo "Installing ssh-vault to ${INSTALL_DIR}..."
         sudo install -m 755 "$VAULT_BIN" "${INSTALL_DIR}/ssh-vault" 2>/dev/null || \
             install -m 755 "$VAULT_BIN" "${INSTALL_DIR}/ssh-vault"
@@ -352,19 +373,46 @@ echo "Your device is now pending approval."
 echo "Ask your administrator to approve it on the hub dashboard."
 echo ""
 
-# Start the sync agent with logs visible for troubleshooting
-AGENT_LOG="${HOME}/.ssh-vault/agent.log"
-echo "Starting sync agent in background..."
-nohup "$VAULT_BIN" agent --key "$SSH_PRIVATE_KEY" >> "$AGENT_LOG" 2>&1 &
-AGENT_PID=$!
-sleep 2
-if kill -0 "$AGENT_PID" 2>/dev/null; then
-    echo "Sync agent running (PID ${AGENT_PID})."
-    echo "Logs: ${AGENT_LOG}"
+# Start the sync agent
+if [ "$IS_TERMUX" = true ]; then
+    # On Termux, set up a cron job via crond (from termux-services)
+    SYNC_LOG="${HOME}/.ssh-vault/sync.log"
+    CRON_ENTRY="*/15 * * * * ${VAULT_BIN} sync >> ${SYNC_LOG} 2>&1; [ \$(wc -c < ${SYNC_LOG}) -gt 1048576 ] && tail -500 ${SYNC_LOG} > ${SYNC_LOG}.tmp && mv ${SYNC_LOG}.tmp ${SYNC_LOG}"
+
+    if ! command -v crond >/dev/null 2>&1; then
+        echo ""
+        echo "NOTE: For automatic key syncing, install termux-services:"
+        echo "  pkg install termux-services"
+        echo "  sv-enable crond"
+        echo ""
+        echo "Then add this cron entry manually:"
+        echo "  (crontab -l 2>/dev/null; echo '${CRON_ENTRY}') | crontab -"
+        echo ""
+    else
+        # Install crontab entry (append, preserving existing entries)
+        ( crontab -l 2>/dev/null | grep -v 'ssh-vault sync'; echo "${CRON_ENTRY}" ) | crontab -
+        echo "Cron job installed: sync every 15 minutes"
+        echo "Logs: ${SYNC_LOG}"
+    fi
+
+    # Run one immediate sync
+    echo "Running initial sync..."
+    "${VAULT_BIN}" sync >> "${SYNC_LOG}" 2>&1 && echo "Initial sync complete." || echo "Initial sync pending (device may need approval first)."
 else
-    echo "Warning: Agent exited early. Check logs: ${AGENT_LOG}"
-    tail -5 "$AGENT_LOG" 2>/dev/null
+    # On Linux/macOS, start the daemon in the background
+    AGENT_LOG="${HOME}/.ssh-vault/agent.log"
+    echo "Starting sync agent in background..."
+    nohup "$VAULT_BIN" agent --key "$SSH_PRIVATE_KEY" >> "$AGENT_LOG" 2>&1 &
+    AGENT_PID=$!
+    sleep 2
+    if kill -0 "$AGENT_PID" 2>/dev/null; then
+        echo "Sync agent running (PID ${AGENT_PID})."
+        echo "Logs: ${AGENT_LOG}"
+    else
+        echo "Warning: Agent exited early. Check logs: ${AGENT_LOG}"
+        tail -5 "$AGENT_LOG" 2>/dev/null
+    fi
+    echo "To stop: kill ${AGENT_PID}"
 fi
-echo "To stop: kill ${AGENT_PID}"
 `, hubURL, hubURL, token, downloadBaseURL)
 }

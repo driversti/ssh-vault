@@ -38,7 +38,7 @@ func Run(cfg *Config) error {
 	hubDown := false
 
 	// Run initial sync immediately
-	if err := syncOnce(cfg); err != nil {
+	if err := SyncOnce(cfg); err != nil {
 		if isHubUnreachable(err) {
 			slog.Info("hub not reachable — first sync pending, will retry", "error", err)
 		} else {
@@ -57,7 +57,7 @@ func Run(cfg *Config) error {
 	for {
 		select {
 		case <-ticker.C:
-			if err := syncOnce(cfg); err != nil {
+			if err := SyncOnce(cfg); err != nil {
 				// Revocation — unrecoverable
 				if strings.Contains(err.Error(), "device revoked") {
 					slog.Error("device has been revoked — stopping agent", "error", err)
@@ -92,9 +92,9 @@ func Run(cfg *Config) error {
 	}
 }
 
-// syncOnce performs a single sync: fetches keys from the hub and writes
+// SyncOnce performs a single sync: fetches keys from the hub and writes
 // them to the authorized_keys file.
-func syncOnce(cfg *Config) error {
+func SyncOnce(cfg *Config) error {
 	keys, err := fetchKeys(cfg.HubURL, cfg.APIToken)
 	if err != nil {
 		return err
