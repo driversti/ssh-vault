@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -121,16 +122,27 @@ func runAgent(args []string) error {
 		return fmt.Errorf("loading agent config: %w (run 'ssh-vault enroll' first)", err)
 	}
 
-	// Override with CLI flags if provided
+	// Track which flags were explicitly set by the user.
+	explicitFlags := make(map[string]bool)
+	fs.Visit(func(f *flag.Flag) { explicitFlags[f.Name] = true })
+
+	// Override with CLI flags if provided; prefer saved config values
+	// when flags are at their defaults.
 	if *hubURL != "" {
 		cfg.HubURL = *hubURL
 	}
 	if cfg.HubURL == "" {
 		return fmt.Errorf("--hub-url is required")
 	}
-	cfg.Interval = dur
-	cfg.KeyPath = expandHome(*keyPath)
-	cfg.AuthKeysPath = expandHome(*authKeysPath)
+	if explicitFlags["interval"] || cfg.Interval == 0 {
+		cfg.Interval = dur
+	}
+	if explicitFlags["key"] || cfg.KeyPath == "" {
+		cfg.KeyPath = expandHome(*keyPath)
+	}
+	if explicitFlags["auth-keys"] || cfg.AuthKeysPath == "" {
+		cfg.AuthKeysPath = expandHome(*authKeysPath)
+	}
 
 	return agent.Run(cfg)
 }
@@ -193,6 +205,15 @@ func runEnroll(args []string) error {
 		return fmt.Errorf("saving config: %w", err)
 	}
 
+	// Verify the saved config is complete (read-back check).
+	saved, err := agent.LoadConfig(configPath)
+	if err != nil {
+		return fmt.Errorf("verifying saved config: %w", err)
+	}
+	if saved.APIToken == "" {
+		return fmt.Errorf("config verification failed: API token was not persisted to %s", configPath)
+	}
+
 	fmt.Printf("Config saved to %s\n", configPath)
 	return nil
 }
@@ -202,6 +223,7 @@ func expandHome(path string) string {
 	if path == "~" || len(path) > 1 && path[:2] == "~/" {
 		home, err := os.UserHomeDir()
 		if err != nil {
+			slog.Warn("could not determine home directory, using path as-is", "path", path, "error", err)
 			return path
 		}
 		return filepath.Join(home, path[1:])

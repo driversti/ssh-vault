@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/driversti/ssh-vault/internal/model"
+	"golang.org/x/crypto/ssh"
 )
 
 //go:embed templates/*
@@ -95,6 +96,35 @@ func NewServer(cfg ServerConfig) *Server {
 			default:
 				return "expired"
 			}
+		},
+		"keyUser": func(publicKey string) string {
+			_, comment, _, _, err := ssh.ParseAuthorizedKey([]byte(publicKey))
+			if err != nil || comment == "" {
+				return ""
+			}
+			user, _, found := strings.Cut(comment, "@")
+			if !found {
+				return comment
+			}
+			return user
+		},
+		"keyHost": func(publicKey string) string {
+			_, comment, _, _, err := ssh.ParseAuthorizedKey([]byte(publicKey))
+			if err != nil || comment == "" {
+				return ""
+			}
+			_, host, found := strings.Cut(comment, "@")
+			if !found {
+				return ""
+			}
+			return host
+		},
+		"keyType": func(publicKey string) string {
+			key, _, _, _, err := ssh.ParseAuthorizedKey([]byte(publicKey))
+			if err != nil {
+				return ""
+			}
+			return strings.TrimPrefix(key.Type(), "ssh-")
 		},
 	}
 

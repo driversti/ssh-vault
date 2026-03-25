@@ -44,7 +44,7 @@
                         </div>
                         <div>
                             <div class="device-info-name"><span class="editable-name" data-device-id="{{.ID}}">{{.Name}}</span>{{if isStale .}}<span class="stale-dot"></span>{{end}}</div>
-                            <div class="device-info-fp">{{formatFingerprint .Fingerprint}}</div>
+                            <div class="device-info-fp">{{if keyUser .PublicKey}}<span class="key-type">{{keyType .PublicKey}}</span> {{keyUser .PublicKey}}{{if keyHost .PublicKey}}<span class="key-at">@</span>{{keyHost .PublicKey}}{{end}}{{else}}{{formatFingerprint .Fingerprint}}{{end}} <button type="button" class="key-expand-btn" data-device-id="{{.ID}}" title="Show full key">&#x1f511;</button></div>
                         </div>
                     </div>
                 </td>
@@ -70,6 +70,14 @@
                             <button type="submit" class="btn btn-danger btn-sm">Remove</button>
                         </form>
                     {{end}}
+                </td>
+            </tr>
+            <tr class="key-detail-row" id="key-detail-{{.ID}}" style="display:none">
+                <td colspan="4">
+                    <div class="key-detail">
+                        <pre class="key-detail-pre">{{.PublicKey}}</pre>
+                        <button type="button" class="btn btn-sm key-copy-btn" data-key="{{.ID}}">Copy</button>
+                    </div>
                 </td>
             </tr>
             {{end}}
@@ -108,6 +116,37 @@
     font-size: 0.8em;
     margin-top: 2px;
 }
+.key-expand-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.7rem;
+    padding: 0 2px;
+    vertical-align: middle;
+    opacity: 0.5;
+    transition: opacity 0.15s;
+}
+.key-expand-btn:hover { opacity: 1; }
+.key-detail {
+    padding: 0.5rem 0.75rem;
+    background: var(--surface-raised, rgba(128,128,128,0.06));
+    border-top: 1px solid var(--border, rgba(128,128,128,0.15));
+}
+.key-detail-pre {
+    margin: 0 0 0.4rem 0;
+    font-family: 'SF Mono', Menlo, monospace;
+    font-size: 0.72rem;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: var(--text-secondary);
+    max-height: 6rem;
+    overflow-y: auto;
+}
+.key-copy-btn {
+    font-size: 0.72rem;
+    padding: 2px 8px;
+}
+.key-detail-row td { padding: 0; }
 </style>
 <script>
 document.addEventListener('click', function(e) {
@@ -195,6 +234,47 @@ document.addEventListener('click', function(e) {
         }
     });
 });
+
+// Expand/collapse full public key
+document.addEventListener('click', function(e) {
+    var btn = e.target.closest('.key-expand-btn');
+    if (btn) {
+        var id = btn.dataset.deviceId;
+        var row = document.getElementById('key-detail-' + id);
+        if (row) {
+            row.style.display = row.style.display === 'none' ? '' : 'none';
+        }
+        return;
+    }
+
+    var copyBtn = e.target.closest('.key-copy-btn');
+    if (copyBtn) {
+        var pre = copyBtn.parentElement.querySelector('.key-detail-pre');
+        if (!pre) return;
+        var text = pre.textContent;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(function() {
+                showCopyFeedback(copyBtn);
+            });
+        } else {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            showCopyFeedback(copyBtn);
+        }
+    }
+});
+
+function showCopyFeedback(btn) {
+    var orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(function() { btn.textContent = orig; }, 2000);
+}
 </script>
 {{end}}
 {{template "layout" .}}

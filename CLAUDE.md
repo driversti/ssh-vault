@@ -14,6 +14,7 @@ Auto-generated from all feature plans. Last updated: 2026-03-22
 - Filesystem (`~/.ssh/id_ed25519`, `~/.ssh/id_ed25519.pub`) (006-auto-ssh-keygen)
 - Go 1.26.1 + Standard library (`net/http`, `html/template`, `strconv`, `math`), existing `golang.org/x/crypto/ssh` (008-paginated-audit-log)
 - JSON file via `FileStore` (no changes to persistence layer) (008-paginated-audit-log)
+- Go 1.26.1 + Standard library (`html/template`, `strings`), existing `golang.org/x/crypto/ssh` (009-device-public-keys)
 
 - Go (latest stable) + standard library (001-ssh-key-sync-hub)
 - `golang.org/x/crypto/ssh` for SSH key parsing
@@ -43,9 +44,9 @@ Go: Follow Effective Go and Go Code Review Comments guidelines.
 Use `gofmt`/`goimports`. Explicit error handling. Table-driven tests.
 
 ## Recent Changes
+- 009-device-public-keys: Added Go 1.26.1 + Standard library (`html/template`, `strings`), existing `golang.org/x/crypto/ssh`
 - 008-paginated-audit-log: Added Go 1.26.1 + Standard library (`net/http`, `html/template`, `strconv`, `math`), existing `golang.org/x/crypto/ssh`
 - 007-device-rename: Added Go 1.26.1 + `golang.org/x/crypto/ssh` (existing), standard library only
-- 006-auto-ssh-keygen: Added Go 1.26.1 (CLI binary) + POSIX shell (enrollment script generated server-side) + Standard library, `os/exec` for `ssh-keygen` invocation in Go, `ssh-keygen` CLI tool in shell scrip
 
 
 <!-- MANUAL ADDITIONS START -->

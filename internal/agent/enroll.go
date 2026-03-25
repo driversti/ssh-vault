@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/term"
@@ -69,8 +70,15 @@ func Enroll(cfg EnrollConfig) (*Config, error) {
 		}
 	}
 
-	// Get the public key in authorized_keys format
-	pubKey := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(signer.PublicKey())))
+	// Get the public key in authorized_keys format.
+	// Prefer the .pub file (preserves the user@host comment); fall back to
+	// deriving from the private key if the .pub file is missing.
+	var pubKey string
+	if pubData, err := os.ReadFile(cfg.KeyPath + ".pub"); err == nil {
+		pubKey = strings.TrimSpace(string(pubData))
+	} else {
+		pubKey = strings.TrimSpace(string(ssh.MarshalAuthorizedKey(signer.PublicKey())))
+	}
 
 	// Step 1: POST /api/enroll
 	enrollBody, _ := json.Marshal(map[string]string{
@@ -141,8 +149,11 @@ func Enroll(cfg EnrollConfig) (*Config, error) {
 	fmt.Printf("%s\n", vResp.Message)
 
 	return &Config{
-		HubURL:   cfg.HubURL,
-		DeviceID: enrollResp.DeviceID,
-		APIToken: vResp.APIToken,
+		HubURL:       cfg.HubURL,
+		Interval:     5 * time.Minute,
+		KeyPath:      cfg.KeyPath,
+		AuthKeysPath: defaultAuthKeysPath(),
+		DeviceID:     enrollResp.DeviceID,
+		APIToken:     vResp.APIToken,
 	}, nil
 }
