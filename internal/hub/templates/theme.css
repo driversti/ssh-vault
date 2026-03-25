@@ -418,6 +418,19 @@ tbody tr:hover { background: var(--row-hover); }
 
 .device-info-name { font-weight: 500; font-size: 0.88rem; }
 .device-info-fp { font-family: 'SF Mono', Menlo, monospace; font-size: 0.74rem; color: var(--text-tertiary); margin-top: 0.1rem; }
+.key-type {
+  display: inline-block;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  background: var(--surface-raised, rgba(128,128,128,0.12));
+  color: var(--text-secondary);
+  vertical-align: baseline;
+  margin-right: 2px;
+}
+.key-at { color: var(--text-tertiary); }
 
 /* ── Code display ── */
 code {
@@ -595,6 +608,57 @@ code {
 }
 
 .login-card .error { color: var(--red); font-size: 0.85rem; margin-bottom: 1rem; }
+
+/* ── Pagination ── */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  margin-top: 1.25rem;
+}
+
+.pagination-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.82rem;
+  border-radius: 6px;
+  border: 0.5px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.pagination-link:hover { color: var(--text); border-color: var(--border-strong); }
+
+.pagination-active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.pagination-active:hover { color: #fff; }
+
+.pagination-disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pagination-disabled:hover { color: var(--text-secondary); border-color: var(--border); }
+
+.pagination-ellipsis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  color: var(--text-tertiary);
+  font-size: 0.82rem;
+}
 
 /* ── Confirm Dialog ── */
 .confirm-dialog { background: transparent; border: none; border-radius: 16px; padding: 0; margin: auto; }

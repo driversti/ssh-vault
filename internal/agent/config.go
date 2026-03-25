@@ -28,6 +28,16 @@ func DefaultConfigPath() (string, error) {
 	return filepath.Join(home, ".ssh-vault", "agent.json"), nil
 }
 
+// defaultAuthKeysPath returns the default authorized_keys path using the
+// absolute home directory (no ~ expansion needed at runtime).
+func defaultAuthKeysPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "~/.ssh/authorized_keys"
+	}
+	return filepath.Join(home, ".ssh", "authorized_keys")
+}
+
 // LoadConfig reads the agent config from the given path.
 func LoadConfig(path string) (*Config, error) {
 	data, err := os.ReadFile(path)

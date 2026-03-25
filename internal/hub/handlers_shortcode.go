@@ -333,13 +333,38 @@ if [ -n "${VAULT_TMPDIR:-}" ]; then
 fi
 
 echo ""
+
+# Verify enrollment config was saved correctly
+CONFIG_FILE="${HOME}/.ssh-vault/agent.json"
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "Error: Config file not created at ${CONFIG_FILE}"
+    exit 1
+fi
+if ! grep -q '"api_token":' "$CONFIG_FILE" || grep -q '"api_token": ""' "$CONFIG_FILE"; then
+    echo "Error: API token not saved in config. Please re-enroll."
+    exit 1
+fi
+echo "Config verified: ${CONFIG_FILE}"
+
+echo ""
 echo "=== Enrollment complete! ==="
 echo "Your device is now pending approval."
 echo "Ask your administrator to approve it on the hub dashboard."
 echo ""
+
+# Start the sync agent with logs visible for troubleshooting
+AGENT_LOG="${HOME}/.ssh-vault/agent.log"
 echo "Starting sync agent in background..."
-nohup "$VAULT_BIN" agent --key "$SSH_PRIVATE_KEY" >/dev/null 2>&1 &
-echo "Sync agent running (PID $!)."
-echo "To stop: kill $!"
+nohup "$VAULT_BIN" agent --key "$SSH_PRIVATE_KEY" >> "$AGENT_LOG" 2>&1 &
+AGENT_PID=$!
+sleep 2
+if kill -0 "$AGENT_PID" 2>/dev/null; then
+    echo "Sync agent running (PID ${AGENT_PID})."
+    echo "Logs: ${AGENT_LOG}"
+else
+    echo "Warning: Agent exited early. Check logs: ${AGENT_LOG}"
+    tail -5 "$AGENT_LOG" 2>/dev/null
+fi
+echo "To stop: kill ${AGENT_PID}"
 `, hubURL, hubURL, token, downloadBaseURL)
 }
