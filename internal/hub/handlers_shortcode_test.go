@@ -286,3 +286,54 @@ func TestHandleShortCodeEnroll_ScriptContainsTemplateVars(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildEnrollmentScript_TermuxDetection(t *testing.T) {
+	script := buildEnrollmentScript("https://hub.example.com", "test-token", "https://hub.example.com/download")
+
+	tests := []struct {
+		name    string
+		content string
+	}{
+		{"Termux env detection", `TERMUX_VERSION`},
+		{"IS_TERMUX variable", `IS_TERMUX=false`},
+		{"Termux install path", `"${PREFIX}/bin"`},
+		{"Termux pkg install curl", `pkg install curl`},
+		{"Termux pkg install openssh", `pkg install openssh`},
+		{"cron entry", `*/15 * * * *`},
+		{"ssh-vault sync in cron", `ssh-vault sync`},
+		{"log rotation", `wc -c`},
+		{"log rotation threshold", `1048576`},
+		{"crond check", `command -v crond`},
+		{"termux-services install hint", `pkg install termux-services`},
+		{"sv-enable crond hint", `sv-enable crond`},
+	}
+
+	for _, tt := range tests {
+		if !strings.Contains(script, tt.content) {
+			t.Errorf("script missing %s: expected %q in output", tt.name, tt.content)
+		}
+	}
+}
+
+func TestBuildEnrollmentScript_NonTermuxUnchanged(t *testing.T) {
+	script := buildEnrollmentScript("https://hub.example.com", "test-token", "https://hub.example.com/download")
+
+	// Non-Termux path should still exist
+	tests := []struct {
+		name    string
+		content string
+	}{
+		{"non-Termux /usr/local/bin path", `/usr/local/bin`},
+		{"non-Termux nohup daemon", `nohup`},
+		{"non-Termux agent command", `agent --key`},
+		{"non-Termux .local/bin fallback", `${HOME}/.local/bin`},
+		{"non-Termux generic curl error", `Neither curl nor wget found. Please install one and try again.`},
+		{"non-Termux generic ssh-keygen error", `Please install OpenSSH and retry.`},
+	}
+
+	for _, tt := range tests {
+		if !strings.Contains(script, tt.content) {
+			t.Errorf("script missing %s: expected %q in output", tt.name, tt.content)
+		}
+	}
+}

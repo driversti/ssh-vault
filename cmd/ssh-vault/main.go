@@ -36,6 +36,9 @@ func main() {
 			fmt.Fprintf(os.Stderr, "enroll: %v\n", err)
 			os.Exit(1)
 		}
+	case "sync":
+		code := runSync(os.Args[2:])
+		os.Exit(code)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", os.Args[1])
 		printUsage()
@@ -49,6 +52,7 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "  hub      Start the hub server\n")
 	fmt.Fprintf(os.Stderr, "  agent    Start the sync agent\n")
 	fmt.Fprintf(os.Stderr, "  enroll   Enroll this device with a hub\n")
+	fmt.Fprintf(os.Stderr, "  sync     Perform a single key sync and exit\n")
 }
 
 func runHub(args []string) error {
@@ -145,6 +149,53 @@ func runAgent(args []string) error {
 	}
 
 	return agent.Run(cfg)
+}
+
+func runSync(args []string) int {
+	fs := flag.NewFlagSet("sync", flag.ExitOnError)
+	configPath := fs.String("config", "", "Path to agent config file (default: ~/.ssh-vault/agent.json)")
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintf(os.Stderr, "sync: %v\n", err)
+		return 1
+	}
+
+	cfgPath := *configPath
+	if cfgPath == "" {
+		var err error
+		cfgPath, err = agent.DefaultConfigPath()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "sync: %v\n", err)
+			return 1
+		}
+	}
+
+	cfg, err := agent.LoadConfig(cfgPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "sync: %v\n", err)
+		return 1
+	}
+
+	if cfg.APIToken == "" {
+		fmt.Fprintf(os.Stderr, "sync: no API token configured — run 'ssh-vault enroll' first and get approved\n")
+		return 1
+	}
+
+	err = agent.SyncOnce(cfg)
+	if err == nil {
+		return 0
+	}
+
+	if strings.Contains(err.Error(), "device revoked") {
+		fmt.Fprintf(os.Stderr, "sync: %v\n", err)
+		return 3
+	}
+	if strings.Contains(err.Error(), "hub unreachable") {
+		fmt.Fprintf(os.Stderr, "sync: %v\n", err)
+		return 2
+	}
+
+	fmt.Fprintf(os.Stderr, "sync: %v\n", err)
+	return 1
 }
 
 func runEnroll(args []string) error {

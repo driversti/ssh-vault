@@ -13,6 +13,9 @@ RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/ssh-vault ./cmd/ssh-vault
 FROM base AS build-linux-amd64
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o /out/ssh-vault_linux_amd64 ./cmd/ssh-vault
 
+FROM base AS build-linux-arm64
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o /out/ssh-vault_linux_arm64 ./cmd/ssh-vault
+
 FROM base AS build-darwin-arm64
 RUN CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o /out/ssh-vault_darwin_arm64 ./cmd/ssh-vault
 
@@ -20,6 +23,7 @@ RUN CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o /out/ssh
 
 FROM alpine:3 AS dist
 COPY --from=build-linux-amd64 /out/ /dist/
+COPY --from=build-linux-arm64 /out/ /dist/
 COPY --from=build-darwin-arm64 /out/ /dist/
 RUN cd /dist && sha256sum ssh-vault_* > checksums.txt
 
