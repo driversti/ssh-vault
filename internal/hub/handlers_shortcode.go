@@ -355,14 +355,13 @@ fi
 
 echo ""
 
-# Verify enrollment config was saved correctly
+# Verify enrollment config was saved correctly.
+# The binary itself performs a read-back verification (loads the saved
+# config and checks that api_token is non-empty) before exiting with 0.
+# With set -e, a failed enrollment would have already aborted the script.
 CONFIG_FILE="${HOME}/.ssh-vault/agent.json"
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "Error: Config file not created at ${CONFIG_FILE}"
-    exit 1
-fi
-if ! grep -q '"api_token":' "$CONFIG_FILE" || grep -q '"api_token": ""' "$CONFIG_FILE"; then
-    echo "Error: API token not saved in config. Please re-enroll."
     exit 1
 fi
 echo "Config verified: ${CONFIG_FILE}"
